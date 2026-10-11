@@ -45,6 +45,8 @@ html.tt-widenTimeline [data-testid="primaryColumn"] {
   min-width: 600px !important;
   flex: 0 1 auto !important;
 }
+/* The timeline's own wrapper (parent of its <section>) is capped at 600px, which left posts narrow inside the wider column. */
+html.tt-widenTimeline [data-testid="primaryColumn"] div:has(> section) { max-width: none !important; width: 100% !important; }
 
 /* User notes (src/notes.js) */
 .tt-note-pill { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 8px; border-radius: 9999px; background: #3c81df; color: #fff; font-size: 12px; font-weight: 400; line-height: 16px; white-space: nowrap; cursor: pointer; vertical-align: middle; }
