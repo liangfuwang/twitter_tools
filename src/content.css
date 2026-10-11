@@ -1,0 +1,63 @@
+/* One rule group per option in settings.js. Twitter/X selectors change often; re-verify against the live DOM. */
+
+/* Left menu: native items only. Bookmarks, Lists, Jobs, Communities and Verified Orgs are injected by content.js. */
+html.tt-navHome header[role="banner"] nav [data-testid="AppTabBar_Home_Link"],
+html.tt-navExplore header[role="banner"] nav [data-testid="AppTabBar_Explore_Link"],
+html.tt-navNotifications header[role="banner"] nav [data-testid="AppTabBar_Notifications_Link"],
+html.tt-navMessages header[role="banner"] nav [data-testid="AppTabBar_DirectMessage_Link"],
+html.tt-navGrok header[role="banner"] nav a[href="/i/grok"],
+html.tt-navHistory header[role="banner"] nav a[href="/i/history"],
+html.tt-navProfile header[role="banner"] nav [data-testid="AppTabBar_Profile_Link"],
+html.tt-navMore header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] {
+  display: none !important;
+}
+
+/* Timeline */
+html.tt-hideSidebar [data-testid="sidebarColumn"] { display: none !important; }
+html.tt-hideMetrics [data-testid="app-text-transition-container"] { visibility: hidden !important; }
+
+/* Bottom-right floating drawers */
+html.tt-hideGrokDrawer [data-testid="GrokDrawer"] { display: none !important; }
+html.tt-hideChatDrawer [data-testid="chat-drawer-root"] { display: none !important; }
+
+/* Compact left nav: medium labels/icons and a narrower header (X fixes it at 275px), so the timeline moves left and gets more room.
+   The header, its first three nested divs and the nav column all carry explicit widths, so each has to be overridden. */
+html.tt-compactNav header[role="banner"] { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
+html.tt-compactNav header[role="banner"] > div { margin-left: 16px !important; }
+html.tt-compactNav header[role="banner"] > div,
+html.tt-compactNav header[role="banner"] > div > div,
+html.tt-compactNav header[role="banner"] > div > div > div { width: 230px !important; }
+html.tt-compactNav header[role="banner"] nav a span,
+html.tt-compactNav header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] span { font-size: 17px !important; line-height: 24px !important; }
+html.tt-compactNav header[role="banner"] nav svg { width: 24px !important; height: 24px !important; }
+html.tt-compactNav header[role="banner"] nav a > div,
+html.tt-compactNav header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] > div { padding: 9px 12px !important; }
+
+/* Top tab bar (For you / Following / lists): same 17px as the compact left nav labels. */
+html.tt-bigTabs [data-testid="primaryColumn"] [role="tablist"] [role="tab"] * { font-size: 17px !important; }
+/* Inactive tabs are spans at weight 500; the left nav uses 400, so match it. The active tab (a div, weight 700) keeps bold. */
+html.tt-bigTabs [data-testid="primaryColumn"] [role="tablist"] [role="tab"] span { font-weight: 400 !important; }
+
+/* Wide timeline: X caps the column at 600px. It still shrinks (down to 600px) when the right sidebar is shown. */
+html.tt-widenTimeline [data-testid="primaryColumn"] {
+  max-width: 900px !important;
+  width: 900px !important;
+  min-width: 600px !important;
+  flex: 0 1 auto !important;
+}
+
+/* User notes (src/notes.js) */
+.tt-note-pill { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 8px; border-radius: 9999px; background: #3c81df; color: #fff; font-size: 12px; font-weight: 400; line-height: 16px; white-space: nowrap; cursor: pointer; vertical-align: middle; }
+.tt-note-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 9999px; color: rgb(113, 118, 123); cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+.tt-note-btn:hover { color: #1d9bf0; background-color: rgba(29, 155, 240, 0.1); }
+.tt-note-btn-profile { box-sizing: border-box; width: 36px; height: 36px; margin: 0 12px 12px 0; border: 1px solid rgba(113, 118, 123, 0.5); color: #1d9bf0; }
+.tt-note-btn-card { margin-left: auto; margin-right: 8px; }
+.tt-note-overlay { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, 0.4); }
+.tt-note-dialog { box-sizing: border-box; width: 360px; max-width: 90vw; padding: 20px; border-radius: 16px; font: 15px system-ui, sans-serif; box-shadow: 0 0 15px rgba(101, 119, 134, 0.3); }
+.tt-note-title { margin-bottom: 12px; font-size: 17px; font-weight: 700; }
+.tt-note-dialog input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid rgba(113, 118, 123, 0.6); border-radius: 6px; background: transparent; color: inherit; font: inherit; outline: none; }
+.tt-note-dialog input:focus { border-color: #1d9bf0; }
+.tt-note-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.tt-note-actions button { padding: 6px 16px; border: 1px solid rgba(113, 118, 123, 0.6); border-radius: 9999px; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.tt-note-actions .tt-note-primary { border-color: #1d9bf0; background: #1d9bf0; color: #fff; }
+.tt-note-actions .tt-note-danger { margin-right: auto; border-color: #f4212e; color: #f4212e; }

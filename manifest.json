@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Twitter Tools",
+  "version": "0.1.0",
+  "description": "优化 Twitter/X 的阅读体验。",
+  "permissions": ["storage"],
+  "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
+  "action": {
+    "default_title": "Twitter Tools",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["src/settings.js", "src/content.js", "lib/html-to-image.js", "src/export.js", "src/notes.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["src/lists-bridge.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["src/lists.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

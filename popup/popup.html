@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Twitter Tools</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Twitter Tools</h1>
+    <button id="open-lists">列表迁移工具</button>
+    <div class="row">
+      <button id="export-notes" class="secondary">导出备注</button>
+      <button id="import-notes" class="secondary">导入备注</button>
+      <input id="import-file" type="file" accept="application/json,.json" hidden />
+    </div>
+    <p id="hint" hidden></p>
+    <form id="options"></form>
+    <script src="../src/settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

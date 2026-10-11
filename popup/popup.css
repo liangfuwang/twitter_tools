@@ -1,0 +1,9 @@
+body { width: 300px; margin: 12px; font: 13px system-ui, sans-serif; }
+h1 { font-size: 15px; margin: 0 0 8px; }
+.hint { margin: 0; color: #666; }
+h2 { font-size: 12px; margin: 12px 0 2px; color: #666; }
+label { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+#open-lists { width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #0f1419; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.row { display: flex; gap: 8px; margin-top: 8px; }
+.secondary { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 12px; cursor: pointer; }
+#hint { margin: 6px 0 0; color: #c00; }
