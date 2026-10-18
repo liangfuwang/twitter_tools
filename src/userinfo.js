@@ -134,31 +134,17 @@ function ttUiEl(tag, cls, text) {
   return el;
 }
 
-// Already-followed authors get no block content (it would be noise on most posts); handles followed from a block
-// in this page session keep a "已关注" tag as feedback.
-const ttUiJustFollowed = new Set();
-
 function ttUiRender(block, handle, u) {
   const bio = ttUiOn("userInfoBio");
   const follow = ttUiOn("quickFollow") && !(ttUiOn("followBack") && u.followedBy);
-  const justFollowed = ttUiJustFollowed.has(handle.toLowerCase());
-  const sig = [handle, bio, follow, u.bio, justFollowed, u.followed, u.requested, u.blocking].join("|");
+  const state = ttUiFollowState(handle);
+  const busy = ttUiBackBusy.has(handle.toLowerCase());
+  const sig = [handle, bio, follow, u.bio, state, busy, u.followed, u.requested, u.blocking].join("|");
   if (block.dataset.ttSig === sig) return;
   block.dataset.ttSig = sig;
   block.textContent = "";
   const row = ttUiEl("div", "tt-ui-row");
-  if (follow && !u.blocking) {
-    if (u.followed) {
-      if (justFollowed) row.append(ttUiEl("span", "tt-ui-tag", "已关注"));
-    }
-    else if (u.requested) row.append(ttUiEl("span", "tt-ui-tag", "已申请"));
-    else {
-      const btn = ttUiEl("button", "tt-ui-follow", "关注");
-      btn.type = "button";
-      btn.dataset.ttHandle = handle;
-      row.append(btn);
-    }
-  }
+  if (follow && !u.blocking && (!u.followed || state || busy)) row.append(ttUiFollowControl(handle, u, false));
   if (row.children.length) block.append(row);
   if (bio && u.bio) {
     const el = ttUiEl("div", "tt-ui-bio", u.bio.replace(/\s+/g, " "));
@@ -172,32 +158,44 @@ const ttUiBackState = new Map();
 const ttUiBackBusy = new Set();
 let ttUiStateOwner = "";
 
-// Compact button beside the account's name, including profile headers and user lists.
-function ttUiSyncFollowBack(nameBox, handle, user) {
-  const existing = nameBox?.querySelector(".tt-ui-followback");
+function ttUiFollowState(handle) {
   const key = handle?.toLowerCase();
-  const state = ttUiBackState.get(key) || (key && ttUiFresh(key) ? ttUiCache[key]?.backStatus : undefined);
-  if (!nameBox || !ttUiOn("followBack") || !user?.followedBy || user.blocking || (user.followed && !state)) {
-    existing?.remove();
-    return;
-  }
+  return ttUiBackState.get(key) || (key && ttUiFresh(key) ? ttUiCache[key]?.backStatus : undefined);
+}
+
+// Both entry points share progress, pending approval and notification-retry feedback.
+function ttUiFollowControl(handle, user, followBack) {
+  const key = handle.toLowerCase();
+  const state = ttUiFollowState(handle);
   const busy = ttUiBackBusy.has(key);
   const requested = user.requested && !user.followed;
   const done = state === "done" && user.followed;
-  const text = busy ? "处理中…" : done ? "已回关 · 通知已开启" : requested ? "已申请 · 待批准" :
+  const action = followBack ? "回关" : "关注";
+  const text = busy ? "处理中…" : done ? `已${action} · 通知已开启` : requested ? "已申请 · 待批准" :
     state === "notifyFailed" || user.followed ? "开启通知" : state === "unconfirmed" ? "确认关注状态" :
-    state === "error" ? "重试回关" : "回关";
-  const signature = JSON.stringify([handle, text, busy]);
-  if (existing?.dataset.ttSig === signature) return;
-  const el = ttUiEl(done ? "span" : "button", "tt-ui-followback " + (done ? "tt-ui-tag" : "tt-ui-follow"), text);
-  el.dataset.ttSig = signature;
+    state === "error" ? `重试${action}` : action;
+  const el = ttUiEl(done ? "span" : "button", (followBack ? "tt-ui-followback " : "") + (done ? "tt-ui-tag" : "tt-ui-follow"), text);
+  el.dataset.ttSig = JSON.stringify([handle, text, busy]);
   el.dataset.ttHandle = handle;
   if (!done) {
     el.type = "button";
     el.disabled = busy;
   }
   el.title = requested ? "点击检查审批状态；对方批准关注后开启发帖通知" :
-    state === "notifyFailed" ? "已回关，通知未确认开启；点击重试" : "回关并开启对方的发帖通知";
+    state === "notifyFailed" ? `已${action}，通知未确认开启；点击重试` : `${action}并开启对方的发帖通知`;
+  return el;
+}
+
+// Compact button beside the account's name, including profile headers and user lists.
+function ttUiSyncFollowBack(nameBox, handle, user) {
+  const existing = nameBox?.querySelector(".tt-ui-followback");
+  const state = ttUiFollowState(handle);
+  if (!nameBox || !ttUiOn("followBack") || !user?.followedBy || user.blocking || (user.followed && !state)) {
+    existing?.remove();
+    return;
+  }
+  const el = ttUiFollowControl(handle, user, true);
+  if (existing?.dataset.ttSig === el.dataset.ttSig) return;
   if (existing) existing.replaceWith(el);
   else {
     const name = ttNoteNameBox(nameBox);
@@ -207,16 +205,20 @@ function ttUiSyncFollowBack(nameBox, handle, user) {
   }
 }
 
-async function ttUiFollowBack(handle) {
+function ttUiFollowBack(handle) {
+  return ttUiFollowAction(handle, true);
+}
+
+async function ttUiFollowAction(handle, followBack) {
   const key = handle.toLowerCase();
   const owner = ttUiOwnHandle();
   const viewer = ttOwnId();
   const cached = ttUiCache[key]?.u;
-  if (!cached || ttUiBackBusy.has(key)) return;
+  if (!cached || !ttUiFresh(key) || ttUiBackBusy.has(key)) return;
   ttUiBackBusy.add(key);
   ttUiScan();
   try {
-    const result = await ttFollowBackUser(handle, cached.id);
+    const result = await (followBack ? ttFollowBackUser : ttFollowAndNotifyUser)(handle, cached.id);
     if (ttUiOwnHandle() !== owner || ttOwnId() !== viewer) return;
     ttUiCacheUser(key, result.user);
     ttUiBackState.set(key, result.status);
@@ -252,7 +254,6 @@ function ttUiScan() {
   const own = ttUiOwnHandle();
   if (ttUiStateOwner !== ttUiOwner()) {
     ttUiBackState.clear();
-    ttUiJustFollowed.clear();
     ttUiStateOwner = ttUiOwner();
   }
   const articles = new Set(document.querySelectorAll('article[data-testid="tweet"]'));
@@ -299,22 +300,9 @@ function ttUiScan() {
   if (!enabled) for (const el of document.querySelectorAll(".tt-ui")) el.remove();
 }
 
-async function ttUiFollow(btn) {
-  const u = ttUiCache[btn.dataset.ttHandle.toLowerCase()]?.u;
-  if (!u || btn.disabled) return;
-  btn.disabled = true;
-  btn.textContent = "关注中…";
-  try {
-    const res = await ttRestPost("friendships/create.json", { user_id: u.id });
-    u.requested = Boolean(res.follow_request_sent);
-    u.followed = !u.requested;
-    ttUiJustFollowed.add(btn.dataset.ttHandle.toLowerCase());
-    ttUiSave();
-    ttUiScan();
-  } catch {
-    btn.disabled = false;
-    btn.textContent = "失败，重试";
-  }
+function ttUiFollow(btn) {
+  if (btn.disabled) return;
+  return ttUiFollowAction(btn.dataset.ttHandle, false);
 }
 
 // The block sits inside the post, so intercept clicks before X opens the post.

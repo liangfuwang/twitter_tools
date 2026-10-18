@@ -4,7 +4,8 @@ const { load } = require("./helpers");
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function setup({ query = async () => ({ data: {} }), sleep = async () => {},
-  back = async () => ({ user: {}, status: "done" }), viewer = () => "viewer", cache = {} } = {}) {
+  back = async () => ({ user: {}, status: "done" }), follow = async () => ({ user: {}, status: "done" }),
+  viewer = () => "viewer", cache = {} } = {}) {
   const articles = [];
   const flags = new Set(["tt-quickFollow"]);
   const observed = new Set();
@@ -16,7 +17,7 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
     createElement: element,
     addEventListener() {},
   };
-  const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiSyncFollowBack", "ttUiCacheUser", "ttUiFresh", "ttUiFollowBack", "ttUiBackState"], {
+  const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiSyncFollowBack", "ttUiCacheUser", "ttUiFresh", "ttUiFollowBack", "ttUiBackState", "ttUiFollow", "ttUiRender"], {
     document, location: { pathname: "/home" },
     chrome: { storage: { local: { get: async () => ({ ttUserCache: cache }), set: async () => {} } } },
     MutationObserver: class { observe() {} },
@@ -30,6 +31,7 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
     ttNoteNameBox: box => box,
     ttOwnId: viewer,
     ttFollowBackUser: back,
+    ttFollowAndNotifyUser: follow,
     ttParseUser: () => null,
     ttGql: query, ttSleep: sleep, setTimeout: () => 0, clearTimeout,
   });
@@ -48,8 +50,12 @@ function nameBox() {
 }
 
 function element(tag) {
+  let text = "";
   return {
-    tagName: tag.toUpperCase(), dataset: {},
+    tagName: tag.toUpperCase(), dataset: {}, children: [],
+    set textContent(value) { text = value; this.children = []; },
+    get textContent() { return text; },
+    append(el) { this.children.push(el); el.parent = this; },
     remove() { this.parent.current = null; },
     replaceWith(el) { this.parent.append(el); },
   };
@@ -193,4 +199,59 @@ test("notification retry survives a page reload for the same signed-in account",
   env.api.ttUiSyncFollowBack(box, "Jack", user);
   assert.equal(box.current.tagName, "BUTTON");
   assert.equal(box.current.textContent, "开启通知");
+});
+
+test("ordinary follow uses the combined operation with follow-back disabled and deduplicates clicks", async () => {
+  const user = { id: "123", followedBy: false, followed: false };
+  let calls = 0;
+  let release;
+  const env = setup({ follow: (handle, id) => {
+    assert.equal(handle, "Jack");
+    assert.equal(id, "123");
+    calls++;
+    return new Promise(resolve => { release = resolve; });
+  }, back: () => { throw new Error("wrong operation"); } });
+  await tick();
+  env.api.ttUiCacheUser("jack", user);
+  const button = { dataset: { ttHandle: "Jack" }, disabled: false };
+  const first = env.api.ttUiFollow(button);
+  await env.api.ttUiFollow(button);
+  assert.equal(calls, 1);
+  const busyBlock = element("div");
+  env.api.ttUiRender(busyBlock, "Jack", user);
+  assert.equal(busyBlock.children[0].children[0].textContent, "处理中…");
+  assert.equal(busyBlock.children[0].children[0].disabled, true);
+  release({ user: { ...user, followed: true }, status: "done" });
+  await first;
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", { ...user, followed: true });
+  assert.equal(block.children[0].children[0].tagName, "SPAN");
+  assert.equal(block.children[0].children[0].textContent, "已关注 · 通知已开启");
+});
+
+test("ordinary follow renders pending approval and restores notification retry after reload", async () => {
+  const user = { id: "123", followedBy: false, followed: true };
+  const env = setup({ cache: { jack: { v: 2, owner: "viewer", t: Date.now(), u: user, backStatus: "notifyFailed" } } });
+  await tick();
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.equal(block.children[0].children[0].textContent, "开启通知");
+  assert.match(block.children[0].children[0].title, /已关注，通知未确认/);
+  env.api.ttUiRender(block, "Jack", { ...user, followed: false, requested: true });
+  assert.equal(block.children[0].children[0].textContent, "已申请 · 待批准");
+  assert.equal(block.children[0].children[0].tagName, "BUTTON");
+});
+
+test("ordinary follow failure keeps a retry button and explains the notification action", async () => {
+  const user = { id: "123", followedBy: false, followed: false };
+  const env = setup({ follow: async () => { throw new Error("denied"); } });
+  await tick();
+  env.api.ttUiCacheUser("jack", user);
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.match(block.children[0].children[0].title, /关注并开启对方的发帖通知/);
+  await env.api.ttUiFollow({ dataset: { ttHandle: "Jack" } });
+  env.api.ttUiRender(block, "Jack", user);
+  assert.equal(block.children[0].children[0].textContent, "重试关注");
+  assert.equal(block.children[0].children[0].disabled, false);
 });

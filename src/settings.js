@@ -33,7 +33,7 @@ const TT_SECTIONS = [
     title: "作者信息（勾选 = 启用）",
     options: [
       { key: "userInfoBio", label: "在帖子下方显示作者简介" },
-      { key: "quickFollow", label: "快速关注按钮（不用进入对方主页）", on: true },
+      { key: "quickFollow", label: "快速关注按钮（关注并开启对方的发帖通知）", on: true },
       { key: "followBack", label: "回关按钮（回关并开启对方的发帖通知）", on: true },
     ],
   },

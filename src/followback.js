@@ -1,6 +1,10 @@
-// Follow-back writes only run after a user clicks the button. Re-read the relationship instead of trusting
+// Follow/notification writes only run after a user clicks the button. Re-read the relationship instead of trusting
 // the author cache; a handle can change owners and the follow/create response can contain old follow state.
-async function ttFollowBackUser(handle, expectedID) {
+function ttFollowBackUser(handle, expectedID) {
+  return ttFollowAndNotifyUser(handle, expectedID, { requireFollower: true });
+}
+
+async function ttFollowAndNotifyUser(handle, expectedID, { requireFollower = false } = {}) {
   const viewer = ttOwnId();
   function sameViewer() {
     if (!viewer || ttOwnId() !== viewer) {
@@ -19,7 +23,7 @@ async function ttFollowBackUser(handle, expectedID) {
   }
 
   let user = await readUser();
-  if (user.blocking || (!user.followedBy && !user.followed)) return { user, status: "unavailable" };
+  if (user.blocking || (requireFollower && !user.followedBy && !user.followed)) return { user, status: "unavailable" };
   if (!user.followed && user.requested) return { user, status: "requested" };
   if (!user.followed) {
     const result = await ttRestPost("friendships/create.json", { user_id: user.id });

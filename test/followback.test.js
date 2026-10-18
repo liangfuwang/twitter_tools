@@ -10,7 +10,7 @@ function setup({ followed = false, followedBy = true, requested = false, blocked
   const user = () => ({ __typename: "User", rest_id: "123", relationship_perspectives: {
     following: followed, followed_by: followedBy, blocking: blocked,
   }, follow_request_sent: requested });
-  const api = load("src/followback.js", ["ttFollowBackUser"], {
+  const api = load("src/followback.js", ["ttFollowBackUser", "ttFollowAndNotifyUser"], {
     ttParseUser,
     ttOwnId: viewer,
     ttGql: async (name, params) => {
@@ -46,6 +46,47 @@ test("a non-follower never triggers a follow or notification write", async () =>
   const env = setup({ followedBy: false });
   assert.equal((await env.ttFollowBackUser("testuser", "123")).status, "unavailable");
   assert.equal(env.calls.length, 1);
+});
+
+test("ordinary follow enables notifications even when the target does not follow the viewer", async () => {
+  const env = setup({ followedBy: false });
+  const result = await env.ttFollowAndNotifyUser("testuser", "123");
+  assert.equal(result.status, "done");
+  assert.equal(result.user.followed, true);
+  assert.deepEqual(env.calls.map(c => c.name), ["UserByScreenName", "friendships/create.json", "UserByScreenName", "friendships/update.json"]);
+  assert.deepEqual(env.calls.at(-1).params, { user_id: "123", device: "true" });
+});
+
+test("ordinary follow retries only notifications after partial success", async () => {
+  let attempts = 0;
+  const env = setup({ followedBy: false, notify: () => {
+    if (++attempts === 1) throw new Error("temporarily unavailable");
+    return { relationship: { source: { notifications_enabled: true } } };
+  } });
+  assert.equal((await env.ttFollowAndNotifyUser("testuser", "123")).status, "notifyFailed");
+  assert.equal((await env.ttFollowAndNotifyUser("testuser", "123")).status, "done");
+  assert.equal(env.calls.filter(c => c.name === "friendships/create.json").length, 1);
+  assert.equal(env.calls.filter(c => c.name === "friendships/update.json").length, 2);
+});
+
+test("ordinary private follow waits for approval and checks it on the next click", async () => {
+  let approved = false;
+  const env = setup({ followedBy: false, create: () => ({ follow_request_sent: true }),
+    read: (_, user) => ({ ...user, relationship_perspectives: { ...user.relationship_perspectives, following: approved } }) });
+  assert.equal((await env.ttFollowAndNotifyUser("testuser", "123")).status, "requested");
+  assert.equal(env.calls.some(c => c.name === "friendships/update.json"), false);
+  approved = true;
+  assert.equal((await env.ttFollowAndNotifyUser("testuser", "123")).status, "done");
+  assert.equal(env.calls.filter(c => c.name === "friendships/create.json").length, 1);
+});
+
+test("ordinary follow still rejects blocked or reassigned targets before writes", async () => {
+  const blocked = setup({ followedBy: false, blocked: true });
+  assert.equal((await blocked.ttFollowAndNotifyUser("testuser", "123")).status, "unavailable");
+  assert.equal(blocked.calls.length, 1);
+  const reassigned = setup({ followedBy: false, read: (_, user) => ({ ...user, rest_id: "456" }) });
+  await assert.rejects(reassigned.ttFollowAndNotifyUser("testuser", "123"), /账号信息已变化/);
+  assert.equal(reassigned.calls.length, 1);
 });
 
 test("blocked accounts never trigger writes", async () => {
