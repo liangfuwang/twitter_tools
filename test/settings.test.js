@@ -23,6 +23,14 @@ test("defaults: inject/hidden/on options are true, others false", () => {
   assert.equal(api.TT_DEFAULTS.noteReplaceAt, true);
   assert.equal(api.TT_DEFAULTS.noteToolbarBtn, undefined);
   assert.equal(api.TT_DEFAULTS.navHome, false);
+  assert.equal(api.TT_DEFAULTS.navCreatorStudio, false);
+});
+
+test("every native left-menu option has a CSS rule", () => {
+  const css = require("node:fs").readFileSync(require("node:path").join(__dirname, "../src/content.css"), "utf8");
+  for (const o of api.TT_SECTIONS[0].options) {
+    if (!o.inject) assert.ok(css.includes(`html.tt-${o.key} `), o.key);
+  }
 });
 
 test("ttNoteHandleFromHref accepts profile paths only", () => {
@@ -72,7 +80,7 @@ test("ttParseUser reads the current schema and expands bio links", () => {
     __typename: "User",
     rest_id: "12",
     relationship_counts: { followers: 100, following: 3 },
-    relationship_perspectives: { following: true, followed_by: true, blocking: false },
+    relationship_perspectives: { following: true, blocking: false },
     follow_request_sent: false,
     privacy: { protected: false },
     profile_bio: {
@@ -82,16 +90,14 @@ test("ttParseUser reads the current schema and expands bio links", () => {
   });
   assert.deepEqual({ ...u }, {
     id: "12", bio: "hi primal.net/jack",
-    followed: true, followedBy: true, requested: false, blocking: false, protected: false,
+    followed: true, requested: false, blocking: false, protected: false,
   });
 });
 
 test("ttParseUser falls back to legacy fields and rejects non-users", () => {
-  const u = api.ttParseUser({ __typename: "User", rest_id: "1", legacy: { followers_count: 5, friends_count: 2, description: "x", following: false, followed_by: true, protected: true } });
+  const u = api.ttParseUser({ __typename: "User", rest_id: "1", legacy: { followers_count: 5, friends_count: 2, description: "x", following: false, protected: true } });
   assert.equal(u.bio, "x");
   assert.equal(u.protected, true);
-  assert.equal(u.followedBy, true);
-  assert.equal(api.TT_DEFAULTS.followBack, true);
   assert.equal(api.ttParseUser({ __typename: "UserUnavailable" }), null);
   assert.equal(api.ttParseUser(undefined), null);
 });

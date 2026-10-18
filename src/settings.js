@@ -11,6 +11,7 @@ const TT_SECTIONS = [
       { key: "navCalls", label: "呼叫" },
       { key: "navGrok", label: "Grok" },
       { key: "navPremium", label: "订阅" },
+      { key: "navCreatorStudio", label: "创作者工作室" },
       { key: "navHistory", label: "历史", hidden: true },
       { key: "navBookmarks", label: "书签", inject: "/i/bookmarks" },
       { key: "navLists", label: "列表", inject: "{user}/lists" },
@@ -34,7 +35,6 @@ const TT_SECTIONS = [
     options: [
       { key: "userInfoBio", label: "在帖子下方显示作者简介" },
       { key: "quickFollow", label: "快速关注按钮（关注并开启对方的发帖通知）", on: true },
-      { key: "followBack", label: "回关按钮（回关并开启对方的发帖通知）", on: true },
     ],
   },
   {
@@ -123,7 +123,6 @@ function ttParseUser(r) {
     id: r.rest_id,
     bio: bio.trim(),
     followed: Boolean(rp.following ?? legacy.following),
-    followedBy: Boolean(rp.followed_by ?? legacy.followed_by),
     requested: Boolean(r.follow_request_sent ?? legacy.follow_request_sent),
     blocking: Boolean(rp.blocking),
     protected: Boolean(r.privacy?.protected ?? legacy.protected),
