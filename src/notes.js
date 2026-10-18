@@ -6,7 +6,7 @@ const TT_NOTE_ICON =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M19 14v8H3V4h10"/><path d="M17.5 4a1.8 1.8 0 012.5 0l.7.7a1.8 1.8 0 010 2.5l-9.4 9.4a1.5 1.5 0 01-1 .4H7.5v-2.7c0-.4.2-.8.4-1.1L17.5 4z"/></svg>';
 
-let ttNotes = {};
+let ttNotes = Object.create(null);
 const ttNoteOn = (flag) => document.documentElement.classList.contains("tt-" + flag);
 
 function ttNoteIcon() {
@@ -39,7 +39,7 @@ function ttNoteNameBox(box) {
 
 function ttNoteSyncPill(box) {
   const handle = ttNoteHandle(box);
-  const note = handle && ttNoteOn("userNotes") ? ttNotes[handle.toLowerCase()] : null;
+  const note = handle && ttNoteOn("userNotes") ? ttNoteForHandle(ttNotes, handle) : null;
   const pill = box.querySelector(".tt-note-pill");
   if (!note) return pill?.remove();
   if (pill && pill.dataset.ttHandle === handle && pill.textContent === note) return;
@@ -54,7 +54,7 @@ function ttNoteSyncPill(box) {
   nameBox.append(el);
 }
 
-// Buttons that open the editor: profile header, hover card, and (optionally) a post's action bar.
+// The button that opens the editor, shown only in the profile header.
 function ttNoteSyncButton(host, handle, place) {
   const existing = host.querySelector(".tt-note-btn");
   if (!handle || !ttNoteOn("userNotes")) return existing?.remove();
@@ -85,27 +85,6 @@ function ttNoteScan() {
     });
   }
 
-  // Hover card: button after the avatar.
-  for (const card of document.querySelectorAll('[data-testid="HoverCard"]')) {
-    const avatar = card.querySelector('[data-testid^="UserAvatar-Container-"]');
-    if (!avatar) continue;
-    ttNoteSyncButton(card, ttNoteHandle(card), (btn) => {
-      btn.classList.add("tt-note-btn-card");
-      avatar.after(btn);
-    });
-  }
-
-  // Post action bar (off by default).
-  for (const article of document.querySelectorAll("article")) {
-    const bar = article.querySelector('[data-testid="reply"]')?.closest('[role="group"]');
-    if (!bar) continue;
-    const handle = ttNoteOn("noteToolbarBtn") ? ttNoteHandle(article.querySelector('[data-testid="User-Name"]') || article) : null;
-    ttNoteSyncButton(bar, handle, (btn) => {
-      btn.classList.add("tt-note-btn-bar");
-      bar.append(btn);
-    });
-  }
-
   ttNoteReplaceMentions();
 }
 
@@ -132,7 +111,7 @@ async function ttNoteSave(handle, note) {
 }
 
 function ttNoteEdit(handle) {
-  const old = ttNotes[handle.toLowerCase()] || "";
+  const old = ttNoteForHandle(ttNotes, handle);
   const cs = getComputedStyle(document.body);
   const overlay = document.createElement("div");
   overlay.className = "tt-note-overlay";
@@ -204,13 +183,13 @@ function ttNoteQueue() {
 }
 
 chrome.storage.local.get(TT_NOTES_KEY).then((r) => {
-  ttNotes = r[TT_NOTES_KEY] || {};
+  ttNotes = ttNormalizeNotes(r[TT_NOTES_KEY]) || Object.create(null);
   ttNoteQueue();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[TT_NOTES_KEY]) {
-    ttNotes = changes[TT_NOTES_KEY].newValue || {};
+    ttNotes = ttNormalizeNotes(changes[TT_NOTES_KEY].newValue) || Object.create(null);
     ttNoteQueue();
   }
 });

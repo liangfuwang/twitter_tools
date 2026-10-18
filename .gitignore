@@ -1,3 +1,10 @@
 .DS_Store
 node_modules/
 *.zip
+.env
+.env.*
+!.env.example
+*.db
+__pycache__/
+logs/
+.venv/

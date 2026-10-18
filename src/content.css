@@ -18,6 +18,9 @@ html.tt-navMore header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] {
 html.tt-hideSidebar [data-testid="sidebarColumn"] { display: none !important; }
 html.tt-hideMetrics [data-testid="app-text-transition-container"] { visibility: hidden !important; }
 
+/* Unread badges (notifications, messages) in the left nav; the tab title count is stripped by content.js. */
+html.tt-hideBadges header[role="banner"] nav a div[aria-live="polite"] { display: none !important; }
+
 /* Bottom-right floating drawers */
 html.tt-hideGrokDrawer [data-testid="GrokDrawer"] { display: none !important; }
 html.tt-hideChatDrawer [data-testid="chat-drawer-root"] { display: none !important; }
@@ -55,7 +58,6 @@ html.tt-widenTimeline [data-testid="primaryColumn"] div:has(> section) { max-wid
 .tt-note-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 9999px; color: rgb(113, 118, 123); cursor: pointer; transition: background-color 0.2s, color 0.2s; }
 .tt-note-btn:hover { color: #1d9bf0; background-color: rgba(29, 155, 240, 0.1); }
 .tt-note-btn-profile { box-sizing: border-box; width: 36px; height: 36px; margin: 0 12px 12px 0; border: 1px solid rgba(113, 118, 123, 0.5); color: #1d9bf0; }
-.tt-note-btn-card { margin-left: auto; margin-right: 8px; }
 .tt-note-overlay { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, 0.4); }
 .tt-note-dialog { box-sizing: border-box; width: 360px; max-width: 90vw; padding: 20px; border-radius: 16px; font: 15px system-ui, sans-serif; box-shadow: 0 0 15px rgba(101, 119, 134, 0.3); }
 .tt-note-title { margin-bottom: 12px; font-size: 17px; font-weight: 700; }
@@ -65,3 +67,14 @@ html.tt-widenTimeline [data-testid="primaryColumn"] div:has(> section) { max-wid
 .tt-note-actions button { padding: 6px 16px; border: 1px solid rgba(113, 118, 123, 0.6); border-radius: 9999px; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
 .tt-note-actions .tt-note-primary { border-color: #1d9bf0; background: #1d9bf0; color: #fff; }
 .tt-note-actions .tt-note-danger { margin-right: auto; border-color: #f4212e; color: #f4212e; }
+
+/* Author info under posts (src/userinfo.js) */
+.tt-ui { margin: 2px 0 8px; color: rgb(113, 118, 123); font-size: 13px; line-height: 16px; }
+.tt-ui[hidden] { display: none; }
+.tt-ui-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tt-ui-tag { padding: 0 6px; border: 1px solid rgba(113, 118, 123, 0.5); border-radius: 9999px; font-size: 12px; }
+.tt-ui-follow { padding: 1px 10px; border: 0; border-radius: 9999px; background: #1d9bf0; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.tt-ui-follow:hover { background: #1a8cd8; }
+.tt-ui-follow:disabled { opacity: 0.6; cursor: default; }
+.tt-ui-bio { display: -webkit-box; margin-top: 2px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; word-break: break-word; cursor: pointer; }
+.tt-ui-bio.tt-ui-open { display: block; }

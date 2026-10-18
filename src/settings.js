@@ -26,6 +26,14 @@ const TT_SECTIONS = [
     options: [
       { key: "hideSidebar", label: "隐藏右侧栏（推荐关注、趋势）" },
       { key: "hideMetrics", label: "隐藏推文下方的数据指标" },
+      { key: "hideBadges", label: "隐藏未读通知/私信数字（左栏徽标、标签页标题）", hidden: true },
+    ],
+  },
+  {
+    title: "作者信息（勾选 = 启用）",
+    options: [
+      { key: "userInfoBio", label: "在帖子下方显示作者简介" },
+      { key: "quickFollow", label: "快速关注按钮（不用进入对方主页）", on: true },
     ],
   },
   {
@@ -45,9 +53,8 @@ const TT_SECTIONS = [
   {
     title: "用户备注（勾选 = 启用）",
     options: [
-      { key: "userNotes", label: "用户备注（个人主页、悬停卡片的备注按钮）", on: true },
+      { key: "userNotes", label: "用户备注（个人主页的备注按钮、名字后的备注标签）", on: true },
       { key: "noteReplaceAt", label: "把推文中的 @用户 替换为备注", on: true },
-      { key: "noteToolbarBtn", label: "在推文操作栏显示备注按钮" },
     ],
   },
   {
@@ -80,21 +87,45 @@ function ttNoteHandleFromHref(href) {
 }
 
 // Text a post mention should show: "@note" when replacing and a note exists, else the original "@handle".
+function ttNoteForHandle(notes, handle) {
+  const key = handle.toLowerCase();
+  return Object.hasOwn(notes, key) && typeof notes[key] === "string" ? notes[key] : "";
+}
+
 function ttNoteMentionText(orig, notes, replace) {
   const m = /^@([A-Za-z0-9_]{1,15})$/.exec(orig);
-  const note = replace && m ? notes[m[1].toLowerCase()] : null;
+  const note = replace && m ? ttNoteForHandle(notes, m[1]) : null;
   return note ? "@" + note : orig;
 }
 
 // Validates imported JSON ({handle: note}); returns { handle(lowercase, no @): trimmed note } or null if not an object.
 function ttNormalizeNotes(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-  const out = {};
+  const out = Object.create(null);
   for (const [handle, note] of Object.entries(data)) {
     const key = handle.replace(/^@/, "").toLowerCase();
     if (TT_HANDLE_RE.test(key) && typeof note === "string" && note.trim()) out[key] = note.trim();
   }
   return out;
+}
+
+// Reduces a UserByScreenName result to what the author info block needs; null if it is not a normal user.
+// Reads the current schema (relationship_counts, profile_bio) and falls back to the older legacy fields.
+function ttParseUser(r) {
+  if (!r || r.__typename !== "User" || !r.rest_id) return null;
+  const legacy = r.legacy || {};
+  const rp = r.relationship_perspectives || {};
+  let bio = r.profile_bio?.description ?? legacy.description ?? "";
+  const urls = r.profile_bio?.entities?.description?.urls ?? legacy.entities?.description?.urls ?? [];
+  for (const u of urls) if (u.url && u.display_url) bio = bio.split(u.url).join(u.display_url);
+  return {
+    id: r.rest_id,
+    bio: bio.trim(),
+    followed: Boolean(rp.following ?? legacy.following),
+    requested: Boolean(r.follow_request_sent ?? legacy.follow_request_sent),
+    blocking: Boolean(rp.blocking),
+    protected: Boolean(r.privacy?.protected ?? legacy.protected),
+  };
 }
 
 function ttLoadSettings() {

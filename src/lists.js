@@ -4,100 +4,11 @@
 
 const TT_LIST_DELAY = 400; // ms between write calls
 
-let ttOpsPromise;
-function ttGetOps() {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("无法读取 X 的接口信息，请刷新页面后重试")), 5000);
-    document.addEventListener(
-      "tt-ops-response",
-      (e) => {
-        clearTimeout(timer);
-        const data = JSON.parse(e.detail);
-        if (!data.bearer || !Object.keys(data.ops).length) reject(new Error("没有找到列表相关接口，请刷新页面后重试"));
-        else resolve(data);
-      },
-      { once: true }
-    );
-    document.dispatchEvent(new CustomEvent("tt-ops-request"));
-  });
-}
-
-const ttSleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function ttWalk(node, visit) {
-  if (node && typeof node === "object") {
-    visit(node);
-    for (const k in node) ttWalk(node[k], visit);
-  }
-}
-
-async function ttGql(name, variables, mutation) {
-  const { ops, bearer } = await ttGetOps();
-  const op = ops[name];
-  if (!op) throw new Error("缺少接口 " + name);
-  const features = Object.fromEntries(op.features.map((f) => [f, true]));
-  const headers = {
-    authorization: "Bearer " + bearer,
-    "x-csrf-token": document.cookie.match(/ct0=([^;]+)/)?.[1] || "",
-    "x-twitter-auth-type": "OAuth2Session",
-    "x-twitter-active-user": "yes",
-    "content-type": "application/json",
-  };
-  for (let attempt = 0; ; attempt++) {
-    let res;
-    if (mutation) {
-      res = await fetch("/i/api/graphql/" + op.id + "/" + name, {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body: JSON.stringify({ variables, features, queryId: op.id }),
-      });
-    } else {
-      const params = new URLSearchParams({
-        variables: JSON.stringify(variables),
-        features: JSON.stringify(features),
-        fieldToggles: JSON.stringify(Object.fromEntries(op.toggles.map((f) => [f, false]))),
-      });
-      res = await fetch("/i/api/graphql/" + op.id + "/" + name + "?" + params, { credentials: "include", headers });
-    }
-    if (res.status === 429 && attempt < 5) {
-      await ttSleep(30000);
-      continue;
-    }
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json) throw new Error("HTTP " + res.status);
-    if (json.errors?.length && !json.data) throw new Error(json.errors[0].message || "接口错误");
-    return json;
-  }
-}
-
-function ttOwnId() {
-  return decodeURIComponent(document.cookie.match(/twid=([^;]+)/)?.[1] || "").replace(/^u=/, "");
-}
-
-async function ttFetchLists() {
-  const json = await ttGql("ListsManagementPageTimeline", { count: 100 });
-  const me = ttOwnId();
-  const seen = new Map();
-  ttWalk(json, (o) => {
-    if (o.__typename === "TimelineTwitterList" && o.list?.id_str) {
-      const l = o.list;
-      seen.set(l.id_str, {
-        id: l.id_str,
-        name: l.name,
-        count: l.member_count,
-        mine: l.user_results?.result?.rest_id === me,
-      });
-    }
-  });
-  return [...seen.values()];
-}
-
-async function ttFetchMembers(listId, onProgress) {
+async function ttFetchMembers(listId, onProgress, signal) {
   const users = new Map();
   let cursor;
   for (let page = 0; page < 200; page++) {
-    const json = await ttGql("ListMembers", { listId, count: 100, ...(cursor && { cursor }) });
+    const json = await ttGql("ListMembers", { listId, count: 100, ...(cursor && { cursor }) }, false, { signal });
     const before = users.size;
     let next;
     ttWalk(json, (o) => {
@@ -113,6 +24,7 @@ async function ttFetchMembers(listId, onProgress) {
     });
     onProgress?.(users.size);
     if (users.size === before || !next || next === cursor) break;
+    if (page === 199) throw new Error("列表成员过多，未能完整读取，请缩小列表后重试");
     cursor = next;
   }
   return [...users.values()];
@@ -137,6 +49,7 @@ const TT_PANEL_CSS = `
 #tt-lists-panel .tt-status{margin-top:12px;color:#536471;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow:auto}
 #tt-lists-panel .tt-bar{height:6px;border-radius:3px;background:#eff3f4;margin-top:10px;overflow:hidden}
 #tt-lists-panel .tt-bar>div{height:100%;width:0;background:#1d9bf0;transition:width .2s}
+#tt-lists-panel [hidden]{display:none!important}
 `;
 
 let ttListsOverlay;
@@ -188,7 +101,13 @@ async function ttOpenListsTool() {
   const overlay = ttEl("div", { id: "tt-lists-overlay" }, style, panel);
   ttListsOverlay = overlay;
   document.body.append(overlay);
-  const close = () => overlay.remove();
+  let cancelled = false;
+  let controller;
+  const close = () => {
+    cancelled = true;
+    controller?.abort();
+    overlay.remove();
+  };
   closeBtn.onclick = close;
   overlay.addEventListener("mousedown", (e) => e.target === overlay && close());
 
@@ -234,11 +153,15 @@ async function ttOpenListsTool() {
   };
 
   loadBtn.onclick = async () => {
+    if (!srcSel.value || !dstSel.value) return say("请选择源列表和自己创建的目标列表。");
     if (srcSel.value === dstSel.value) return say("源列表和目标列表不能相同。");
-    loadBtn.disabled = true;
+    loadBtn.disabled = startBtn.disabled = srcSel.disabled = dstSel.disabled = true;
+    controller = new AbortController();
+    members = [];
+    memberBox.hidden = actions.hidden = selectors.hidden = true;
     setBar(0);
     try {
-      members = await ttFetchMembers(srcSel.value, (n) => say("已读取 " + n + " 个成员…"));
+      members = await ttFetchMembers(srcSel.value, (n) => say("已读取 " + n + " 个成员…"), controller.signal);
       memberBox.replaceChildren(
         ...members.map((m) =>
           ttEl(
@@ -256,42 +179,57 @@ async function ttOpenListsTool() {
     } catch (err) {
       say("读取成员失败：" + err.message);
     }
-    loadBtn.disabled = false;
+    loadBtn.disabled = startBtn.disabled = srcSel.disabled = dstSel.disabled = false;
   };
 
-  let cancelled = false;
-  cancelBtn.onclick = () => (cancelled = true);
+  cancelBtn.onclick = () => {
+    cancelled = true;
+    controller?.abort();
+  };
   startBtn.onclick = async () => {
+    const src = lists.find((l) => l.id === srcSel.value);
+    const dst = lists.find((l) => l.id === dstSel.value);
+    if (!src || !dst?.mine) return say("请选择源列表和自己创建的目标列表。");
+    if (src.id === dst.id) return say("源列表和目标列表不能相同。");
     const ids = new Set(checks().filter((c) => c.checked).map((c) => c.value));
     const todo = members.filter((m) => ids.has(m.id));
     if (!todo.length) return say("没有选中任何成员。");
-    const dst = lists.find((l) => l.id === dstSel.value);
-    const move = moveBox.checked && !moveBox.disabled;
-    if (!confirm("把 " + todo.length + " 个账号加入「" + dst.name + "」" + (move ? "，并从源列表移除" : "") + "？")) return;
+    const move = moveBox.checked && src.mine;
+    if (!confirm("从「" + src.name + "」把 " + todo.length + " 个账号加入「" + dst.name + "」" + (move ? "，并从源列表移除" : "") + "？")) return;
     cancelled = false;
-    startBtn.disabled = loadBtn.disabled = srcSel.disabled = dstSel.disabled = true;
+    controller = new AbortController();
+    startBtn.disabled = loadBtn.disabled = srcSel.disabled = dstSel.disabled = moveBox.disabled = true;
     cancelBtn.hidden = false;
     const failed = [];
     let done = 0;
     for (const m of todo) {
       if (cancelled) break;
       try {
-        await ttGql("ListAddMember", { listId: dst.id, userId: m.id }, true);
-        if (move) await ttGql("ListRemoveMember", { listId: srcSel.value, userId: m.id }, true);
+        await ttGql("ListAddMember", { listId: dst.id, userId: m.id }, true, { signal: controller.signal });
+        if (move) await ttGql("ListRemoveMember", { listId: src.id, userId: m.id }, true, { signal: controller.signal });
       } catch (err) {
+        if (controller.signal.aborted) break;
         failed.push("@" + m.handle + "：" + err.message);
       }
       done++;
       setBar((done / todo.length) * 100);
       say("进度 " + done + "/" + todo.length + "，失败 " + failed.length);
-      await ttSleep(TT_LIST_DELAY);
+      try {
+        await ttSleep(TT_LIST_DELAY, controller.signal);
+      } catch {
+        break;
+      }
     }
     say(
       (cancelled ? "已停止。" : "完成。") + "处理 " + done + "/" + todo.length + "，成功 " + (done - failed.length) +
         "，失败 " + failed.length + (failed.length ? "\n" + failed.join("\n") : "")
     );
     cancelBtn.hidden = true;
+    // A move changes source membership. Require a fresh load before another run.
+    members = [];
+    memberBox.hidden = actions.hidden = selectors.hidden = true;
     startBtn.disabled = loadBtn.disabled = srcSel.disabled = dstSel.disabled = false;
+    sync();
   };
 }
 

@@ -2,8 +2,8 @@
 const form = document.getElementById("options");
 
 document.getElementById("open-lists").addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     await chrome.tabs.sendMessage(tab.id, { type: "tt-open-lists" });
     window.close();
   } catch {
@@ -21,17 +21,24 @@ function showHint(text, ok) {
 }
 
 document.getElementById("export-notes").addEventListener("click", async () => {
-  const notes = (await chrome.storage.local.get(TT_NOTES_KEY))[TT_NOTES_KEY] || {};
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(notes, null, 2)], { type: "application/json" }));
-  a.download = "twitter-tools-notes.json";
-  a.click();
-  showHint("已导出 " + Object.keys(notes).length + " 条备注。", true);
+  try {
+    const notes = (await chrome.storage.local.get(TT_NOTES_KEY))[TT_NOTES_KEY] || {};
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(notes, null, 2)], { type: "application/json" }));
+    a.href = url;
+    a.download = "twitter-tools-notes.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showHint("已导出 " + Object.keys(notes).length + " 条备注。", true);
+  } catch {
+    showHint("导出失败，请重试。", false);
+  }
 });
 
 const importFile = document.getElementById("import-file");
 document.getElementById("import-notes").addEventListener("click", () => importFile.click());
 importFile.addEventListener("change", async () => {
+  if (!importFile.files.length) return;
   try {
     const data = JSON.parse(await importFile.files[0].text());
     const incoming = ttNormalizeNotes(data);
@@ -55,9 +62,20 @@ ttLoadSettings().then((settings) => {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = Boolean(settings[key]);
-      input.addEventListener("change", () => chrome.storage.sync.set({ [key]: input.checked }));
+      input.addEventListener("change", async () => {
+        const checked = input.checked;
+        input.disabled = true;
+        try {
+          await chrome.storage.sync.set({ [key]: checked });
+        } catch {
+          input.checked = !checked;
+          showHint("设置保存失败，请重试。", false);
+        } finally {
+          input.disabled = false;
+        }
+      });
       row.append(input, label);
       form.append(row);
     }
   }
-});
+}).catch(() => showHint("读取设置失败，请重新打开插件。", false));

@@ -23,7 +23,9 @@ document.addEventListener(
   "click",
   (e) => {
     const btn = e.target.closest?.('article button[aria-haspopup="menu"]');
-    if (btn) ttShareButton = btn.matches('[data-testid="caret"]') ? null : btn;
+    if (btn) {
+      ttShareButton = btn.closest('[role="group"]') && !btn.closest('[data-testid="retweet"], [data-testid="unretweet"], [data-testid="caret"]') ? btn : null;
+    }
   },
   true
 );

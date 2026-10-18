@@ -2,7 +2,7 @@
 // exist in its webpack modules. Answers requests from lists.js with a JSON string (CustomEvent details do not
 // reliably carry objects across worlds).
 (() => {
-  const OPS = ["ListMembers", "ListAddMember", "ListRemoveMember", "ListsManagementPageTimeline"];
+  const OPS = ["ListMembers", "ListAddMember", "ListRemoveMember", "ListsManagementPageTimeline", "UserByScreenName"];
   const OP_RE = /queryId:"([^"]+)",operationName:"(\w+)",operationType:"\w+",metadata:\{featureSwitches:\[([^\]]*)\](?:,fieldToggles:\[([^\]]*)\])?/;
   const names = (s) => (s || "").split(",").map((x) => x.replace(/"/g, "").trim()).filter(Boolean);
 

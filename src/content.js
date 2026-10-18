@@ -8,6 +8,7 @@ function ttApply(settings) {
     document.documentElement.classList.toggle("tt-" + key, Boolean(settings[key]));
   }
   ttInject();
+  ttStripTitle();
 }
 
 // 24x24 icon paths for the links injected into the left nav.
@@ -75,6 +76,13 @@ function ttInject() {
   }
 }
 
+// The unread count X prefixes to the tab title, e.g. "(3) Home / X".
+function ttStripTitle() {
+  if (!ttSettings.hideBadges) return;
+  const clean = document.title.replace(/^\(\d+\+?\)\s*/, "");
+  if (clean !== document.title) document.title = clean;
+}
+
 ttLoadSettings().then(ttApply);
 
 // Changes made in the popup apply immediately, without a page reload.
@@ -90,5 +98,6 @@ new MutationObserver(() => {
   requestAnimationFrame(() => {
     ttQueued = false;
     ttInject();
+    ttStripTitle();
   });
 }).observe(document.documentElement, { childList: true, subtree: true });

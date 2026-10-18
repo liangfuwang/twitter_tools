@@ -8,6 +8,7 @@ const api = load("src/settings.js", [
   "ttNoteHandleFromHref",
   "ttNoteMentionText",
   "ttNormalizeNotes",
+  "ttParseUser",
 ]);
 
 test("option keys are unique", () => {
@@ -20,7 +21,7 @@ test("defaults: inject/hidden/on options are true, others false", () => {
   assert.equal(api.TT_DEFAULTS.navHistory, true);
   assert.equal(api.TT_DEFAULTS.userNotes, true);
   assert.equal(api.TT_DEFAULTS.noteReplaceAt, true);
-  assert.equal(api.TT_DEFAULTS.noteToolbarBtn, false);
+  assert.equal(api.TT_DEFAULTS.noteToolbarBtn, undefined);
   assert.equal(api.TT_DEFAULTS.navHome, false);
 });
 
@@ -51,4 +52,44 @@ test("ttNormalizeNotes cleans imported data", () => {
 
 test("ttNormalizeNotes rejects non-objects", () => {
   for (const bad of [null, undefined, "str", 3, [], [1]]) assert.equal(api.ttNormalizeNotes(bad), null);
+});
+
+test("handles matching object property names do not inherit or lose notes", () => {
+  assert.equal(api.ttNoteMentionText("@constructor", {}, true), "@constructor");
+  const notes = api.ttNormalizeNotes(JSON.parse('{"__proto__":"备注","constructor":"作者"}'));
+  assert.equal(Object.hasOwn(notes, "__proto__"), true);
+  assert.equal(api.ttNoteMentionText("@__proto__", notes, true), "@备注");
+  assert.equal(api.ttNoteMentionText("@constructor", notes, true), "@作者");
+});
+
+test("new options default on (hideBadges hidden, author info enabled)", () => {
+  for (const k of ["hideBadges", "quickFollow"]) assert.equal(api.TT_DEFAULTS[k], true, k);
+  assert.equal(api.TT_DEFAULTS.userInfoBio, false);
+});
+
+test("ttParseUser reads the current schema and expands bio links", () => {
+  const u = api.ttParseUser({
+    __typename: "User",
+    rest_id: "12",
+    relationship_counts: { followers: 100, following: 3 },
+    relationship_perspectives: { following: true, blocking: false },
+    follow_request_sent: false,
+    privacy: { protected: false },
+    profile_bio: {
+      description: " hi https://t.co/abc ",
+      entities: { description: { urls: [{ url: "https://t.co/abc", display_url: "primal.net/jack" }] } },
+    },
+  });
+  assert.deepEqual({ ...u }, {
+    id: "12", bio: "hi primal.net/jack",
+    followed: true, requested: false, blocking: false, protected: false,
+  });
+});
+
+test("ttParseUser falls back to legacy fields and rejects non-users", () => {
+  const u = api.ttParseUser({ __typename: "User", rest_id: "1", legacy: { followers_count: 5, friends_count: 2, description: "x", following: false, protected: true } });
+  assert.equal(u.bio, "x");
+  assert.equal(u.protected, true);
+  assert.equal(api.ttParseUser({ __typename: "UserUnavailable" }), null);
+  assert.equal(api.ttParseUser(undefined), null);
 });
