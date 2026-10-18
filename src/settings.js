@@ -34,6 +34,7 @@ const TT_SECTIONS = [
     options: [
       { key: "userInfoBio", label: "在帖子下方显示作者简介" },
       { key: "quickFollow", label: "快速关注按钮（不用进入对方主页）", on: true },
+      { key: "followBack", label: "回关按钮（回关并开启对方的发帖通知）", on: true },
     ],
   },
   {
@@ -122,6 +123,7 @@ function ttParseUser(r) {
     id: r.rest_id,
     bio: bio.trim(),
     followed: Boolean(rp.following ?? legacy.following),
+    followedBy: Boolean(rp.followed_by ?? legacy.followed_by),
     requested: Boolean(r.follow_request_sent ?? legacy.follow_request_sent),
     blocking: Boolean(rp.blocking),
     protected: Boolean(r.privacy?.protected ?? legacy.protected),

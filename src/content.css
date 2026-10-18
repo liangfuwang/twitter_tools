@@ -76,5 +76,6 @@ html.tt-widenTimeline [data-testid="primaryColumn"] div:has(> section) { max-wid
 .tt-ui-follow { padding: 1px 10px; border: 0; border-radius: 9999px; background: #1d9bf0; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .tt-ui-follow:hover { background: #1a8cd8; }
 .tt-ui-follow:disabled { opacity: 0.6; cursor: default; }
+.tt-ui-followback { display: inline-block; margin-left: 6px; vertical-align: middle; white-space: nowrap; line-height: 18px; font-size: 12px; }
 .tt-ui-bio { display: -webkit-box; margin-top: 2px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; word-break: break-word; cursor: pointer; }
 .tt-ui-bio.tt-ui-open { display: block; }

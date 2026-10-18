@@ -6,11 +6,22 @@
 const TT_UI_KEY = "ttUserCache";
 const TT_UI_TTL = 12 * 3600 * 1000;
 const TT_UI_MAX = 800;
+const TT_UI_CACHE_VERSION = 2;
 
-let ttUiCache = {}; // { <lowercase handle>: { t: fetched at, u: ttParseUser result, or null for "no such user" } }
+let ttUiCache = Object.create(null); // { <lowercase handle>: { t: fetched at, u: ttParseUser result, or null for "no such user" } }
 let ttUiReady = false;
 const ttUiOn = (flag) => document.documentElement.classList.contains("tt-" + flag);
-const ttUiFresh = (key) => Date.now() - (ttUiCache[key]?.t || 0) < TT_UI_TTL;
+const ttUiOwner = () => ttOwnId() || ttUiOwnHandle();
+const ttUiFresh = (key) => ttUiCache[key]?.v === TT_UI_CACHE_VERSION &&
+  ttUiCache[key]?.owner === ttUiOwner() && Date.now() - (ttUiCache[key]?.t || 0) < TT_UI_TTL;
+
+function ttUiCacheUser(key, user) {
+  const owner = ttUiOwner();
+  const previous = ttUiCache[key];
+  const backStatus = previous?.owner === owner && previous?.u?.id === user?.id ? previous.backStatus : undefined;
+  ttUiCache[key] = { v: TT_UI_CACHE_VERSION, owner, t: Date.now(), u: user, ...(backStatus && { backStatus }) };
+  ttUiSave();
+}
 
 let ttUiSaveTimer;
 function ttUiSave() {
@@ -28,13 +39,13 @@ function ttUiSave() {
 // --- fetching: one request at a time, only for posts that are (nearly) on screen ---
 
 const ttUiQueue = new Set();
-const ttUiArticles = new Map(); // observed article -> lowercase handle
-const ttUiVisible = new Set(); // articles within the observer's 400px margin
+const ttUiArticles = new Map(); // observed article/account container -> lowercase handle
+const ttUiVisible = new Set(); // containers within the observer's 400px margin
 let ttUiRunning = false;
 let ttUiPausedUntil = 0;
 
 function ttUiNeeded() {
-  return ttUiOn("userInfoBio") || ttUiOn("quickFollow");
+  return ttUiOn("userInfoBio") || ttUiOn("quickFollow") || ttUiOn("followBack");
 }
 
 function ttUiWant(handle) {
@@ -61,10 +72,11 @@ async function ttUiRun() {
       ttUiQueue.delete(handle);
       const key = handle.toLowerCase();
       if (ttUiFresh(key) || !ttUiNear(key)) continue;
+      const owner = ttUiOwner();
       try {
         const json = await ttGql("UserByScreenName", { screen_name: handle }, false, { retry: false });
-        ttUiCache[key] = { t: Date.now(), u: ttParseUser(json.data?.user?.result) };
-        ttUiSave();
+        if (owner !== ttUiOwner()) continue;
+        ttUiCacheUser(key, ttParseUser(json.data?.user?.result));
         ttUiQueueScan();
       } catch (e) {
         if (e.status === 429) {
@@ -91,14 +103,14 @@ function ttUiOwnHandle() {
 }
 
 // The post's author handle, or null when the block should not be shown (own posts, posts on the author's own profile).
-function ttUiHandleOf(article, own) {
-  const userName = article.querySelector('[data-testid="User-Name"]');
+function ttUiHandleOf(article, own, isArticle = true) {
+  const userName = isArticle ? article.querySelector('[data-testid="User-Name"]') : article;
   const handle = userName && ttNoteHandle(userName);
   if (!handle) return null;
   const key = handle.toLowerCase();
   if (key === own) return null;
   const [first, second] = location.pathname.split("/").slice(1);
-  if (first?.toLowerCase() === key && second !== "status") return null;
+  if (isArticle && first?.toLowerCase() === key && second !== "status") return null;
   return handle;
 }
 
@@ -128,7 +140,7 @@ const ttUiJustFollowed = new Set();
 
 function ttUiRender(block, handle, u) {
   const bio = ttUiOn("userInfoBio");
-  const follow = ttUiOn("quickFollow");
+  const follow = ttUiOn("quickFollow") && !(ttUiOn("followBack") && u.followedBy);
   const justFollowed = ttUiJustFollowed.has(handle.toLowerCase());
   const sig = [handle, bio, follow, u.bio, justFollowed, u.followed, u.requested, u.blocking].join("|");
   if (block.dataset.ttSig === sig) return;
@@ -156,6 +168,69 @@ function ttUiRender(block, handle, u) {
   block.hidden = !block.children.length;
 }
 
+const ttUiBackState = new Map();
+const ttUiBackBusy = new Set();
+let ttUiStateOwner = "";
+
+// Compact button beside the account's name, including profile headers and user lists.
+function ttUiSyncFollowBack(nameBox, handle, user) {
+  const existing = nameBox?.querySelector(".tt-ui-followback");
+  const key = handle?.toLowerCase();
+  const state = ttUiBackState.get(key) || (key && ttUiFresh(key) ? ttUiCache[key]?.backStatus : undefined);
+  if (!nameBox || !ttUiOn("followBack") || !user?.followedBy || user.blocking || (user.followed && !state)) {
+    existing?.remove();
+    return;
+  }
+  const busy = ttUiBackBusy.has(key);
+  const requested = user.requested && !user.followed;
+  const done = state === "done" && user.followed;
+  const text = busy ? "处理中…" : done ? "已回关 · 通知已开启" : requested ? "已申请 · 待批准" :
+    state === "notifyFailed" || user.followed ? "开启通知" : state === "unconfirmed" ? "确认关注状态" :
+    state === "error" ? "重试回关" : "回关";
+  const signature = JSON.stringify([handle, text, busy]);
+  if (existing?.dataset.ttSig === signature) return;
+  const el = ttUiEl(done ? "span" : "button", "tt-ui-followback " + (done ? "tt-ui-tag" : "tt-ui-follow"), text);
+  el.dataset.ttSig = signature;
+  el.dataset.ttHandle = handle;
+  if (!done) {
+    el.type = "button";
+    el.disabled = busy;
+  }
+  el.title = requested ? "点击检查审批状态；对方批准关注后开启发帖通知" :
+    state === "notifyFailed" ? "已回关，通知未确认开启；点击重试" : "回关并开启对方的发帖通知";
+  if (existing) existing.replaceWith(el);
+  else {
+    const name = ttNoteNameBox(nameBox);
+    const link = name?.closest?.("a");
+    if (link && nameBox.contains(link)) link.after(el);
+    else (name || nameBox).append(el);
+  }
+}
+
+async function ttUiFollowBack(handle) {
+  const key = handle.toLowerCase();
+  const owner = ttUiOwnHandle();
+  const viewer = ttOwnId();
+  const cached = ttUiCache[key]?.u;
+  if (!cached || ttUiBackBusy.has(key)) return;
+  ttUiBackBusy.add(key);
+  ttUiScan();
+  try {
+    const result = await ttFollowBackUser(handle, cached.id);
+    if (ttUiOwnHandle() !== owner || ttOwnId() !== viewer) return;
+    ttUiCacheUser(key, result.user);
+    ttUiBackState.set(key, result.status);
+    if (["notifyFailed", "requested", "unconfirmed"].includes(result.status)) ttUiCache[key].backStatus = result.status;
+    else delete ttUiCache[key].backStatus;
+    ttUiSave();
+  } catch {
+    if (ttUiOwnHandle() === owner && ttOwnId() === viewer) ttUiBackState.set(key, "error");
+  } finally {
+    ttUiBackBusy.delete(key);
+    ttUiScan();
+  }
+}
+
 const ttUiSeen = new IntersectionObserver(
   (entries) => {
     for (const e of entries) {
@@ -175,18 +250,28 @@ function ttUiScan() {
   if (!ttUiReady) return;
   const enabled = ttUiNeeded();
   const own = ttUiOwnHandle();
+  if (ttUiStateOwner !== ttUiOwner()) {
+    ttUiBackState.clear();
+    ttUiJustFollowed.clear();
+    ttUiStateOwner = ttUiOwner();
+  }
   const articles = new Set(document.querySelectorAll('article[data-testid="tweet"]'));
+  const accounts = ttUiOn("followBack") ? document.querySelectorAll('[data-testid="UserName"], [data-testid="UserCell"], [data-testid="HoverCard"]') : [];
+  const targets = new Set([...articles, ...accounts]);
   for (const article of ttUiArticles.keys()) {
-    if (!enabled || !articles.has(article)) {
+    if (!enabled || !targets.has(article)) {
       ttUiSeen.unobserve(article);
       ttUiArticles.delete(article);
       ttUiVisible.delete(article);
     }
   }
-  for (const article of articles) {
+  for (const article of targets) {
+    const isArticle = articles.has(article);
     let block = article.querySelector(".tt-ui");
-    const handle = enabled ? ttUiHandleOf(article, own) : null;
-    const u = handle && ttUiCache[handle.toLowerCase()]?.u;
+    const handle = enabled ? ttUiHandleOf(article, own, isArticle) : null;
+    const u = handle && ttUiFresh(handle.toLowerCase()) ? ttUiCache[handle.toLowerCase()]?.u : null;
+    const nameBox = isArticle ? article.querySelector('[data-testid="User-Name"]') : article;
+    ttUiSyncFollowBack(nameBox, handle, u);
     const key = handle?.toLowerCase();
     if (ttUiArticles.get(article) !== key) {
       ttUiSeen.unobserve(article);
@@ -198,6 +283,7 @@ function ttUiScan() {
       }
     }
     if (key && ttUiVisible.has(article)) ttUiWant(key);
+    if (!isArticle) continue;
     if (!u) {
       block?.remove();
       continue;
@@ -209,6 +295,7 @@ function ttUiScan() {
     ttUiRender(block, handle, u);
   }
   for (const handle of ttUiQueue) if (!ttUiNear(handle)) ttUiQueue.delete(handle);
+  if (!ttUiOn("followBack")) for (const el of document.querySelectorAll(".tt-ui-followback")) el.remove();
   if (!enabled) for (const el of document.querySelectorAll(".tt-ui")) el.remove();
 }
 
@@ -234,6 +321,13 @@ async function ttUiFollow(btn) {
 document.addEventListener(
   "click",
   (e) => {
+    const back = e.target.closest?.(".tt-ui-followback");
+    if (back) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (back.tagName === "BUTTON" && !back.disabled) ttUiFollowBack(back.dataset.ttHandle);
+      return;
+    }
     if (!e.target.closest?.(".tt-ui")) return;
     e.preventDefault();
     e.stopPropagation();
@@ -255,7 +349,7 @@ function ttUiQueueScan() {
 }
 
 chrome.storage.local.get(TT_UI_KEY).then((r) => {
-  ttUiCache = { ...r[TT_UI_KEY], ...ttUiCache };
+  ttUiCache = Object.assign(Object.create(null), r[TT_UI_KEY], ttUiCache);
 }).catch(() => {}).finally(() => {
   ttUiReady = true;
   ttUiQueueScan();
