@@ -139,13 +139,15 @@ function ttUiRender(block, handle, u) {
   const follow = ttUiOn("quickFollow");
   const state = ttUiFollowState(handle);
   const busy = ttUiFollowBusy.has(handle.toLowerCase());
-  const sig = [handle, bio, follow, u.bio, state, busy, u.followed, u.requested, u.blocking].join("|");
+  const error = ttUiFollowErrors.get(handle.toLowerCase());
+  const sig = [handle, bio, follow, u.bio, state, busy, u.followed, u.requested, u.blocking, error].join("|");
   if (block.dataset.ttSig === sig) return;
   block.dataset.ttSig = sig;
   block.textContent = "";
   const row = ttUiEl("div", "tt-ui-row");
   if (follow && !u.blocking && (!u.followed || state || busy)) row.append(ttUiFollowControl(handle, u));
   if (row.children.length) block.append(row);
+  if (follow && error) block.append(ttUiEl("div", "tt-ui-error", error));
   if (bio && u.bio) {
     const el = ttUiEl("div", "tt-ui-bio", u.bio.replace(/\s+/g, " "));
     el.title = "点击展开/收起";
@@ -156,7 +158,22 @@ function ttUiRender(block, handle, u) {
 
 const ttUiFollowStates = new Map();
 const ttUiFollowBusy = new Set();
+const ttUiFollowErrors = new Map();
 let ttUiStateOwner = "";
+
+function ttUiFollowError(error) {
+  const status = Number(error?.status);
+  const code = Number(error?.apiCode);
+  const details = [status >= 400 && "HTTP " + status, Number.isInteger(code) && "错误码 " + code].filter(Boolean).join("，");
+  if (status === 429 || code === 88) return "X 请求频繁，请稍后再试" + (details ? "（" + details + "）" : "");
+  if (status === 401 || code === 32 || code === 89) return "登录状态已失效，请刷新 X 页面后重试";
+  if (status === 403) return "X 拒绝了请求（" + details + "），请尝试页面原生关注按钮";
+  if (status === 404) return "X 接口或账号不可用（" + details + "），请刷新页面或使用原生关注按钮";
+  if (details) return "X 请求失败（" + details + "），请稍后重试";
+  const message = error?.message || "";
+  if (/^(登录账号已变化|账号信息已变化|无法读取 X 的接口信息|X 的接口信息格式无效|没有找到接口)/.test(message)) return message;
+  return "关注请求未完成，请检查网络或尝试页面原生关注按钮";
+}
 
 function ttUiFollowState(handle) {
   const key = handle?.toLowerCase();
@@ -180,7 +197,7 @@ function ttUiFollowControl(handle, user) {
     el.disabled = busy;
   }
   el.title = requested ? "点击检查审批状态；对方批准关注后开启发帖通知" :
-    state === "notifyFailed" ? "已关注，通知未确认开启；点击重试" : "关注并开启对方的发帖通知";
+    state === "notifyFailed" ? "已关注，通知未确认开启；点击重试" : ttUiFollowErrors.get(key) || "关注并开启对方的发帖通知";
   return el;
 }
 
@@ -192,6 +209,7 @@ async function ttUiFollow(btn) {
   const viewer = ttOwnId();
   const cached = ttUiCache[key]?.u;
   if (!cached || !ttUiFresh(key) || ttUiFollowBusy.has(key)) return;
+  ttUiFollowErrors.delete(key);
   ttUiFollowBusy.add(key);
   ttUiScan();
   try {
@@ -202,8 +220,11 @@ async function ttUiFollow(btn) {
     if (["notifyFailed", "requested", "unconfirmed"].includes(result.status)) ttUiCache[key].followStatus = result.status;
     else delete ttUiCache[key].followStatus;
     ttUiSave();
-  } catch {
-    if (ttUiOwnHandle() === owner && ttOwnId() === viewer) ttUiFollowStates.set(key, "error");
+  } catch (error) {
+    if (ttUiOwnHandle() === owner && ttOwnId() === viewer) {
+      ttUiFollowStates.set(key, "error");
+      ttUiFollowErrors.set(key, ttUiFollowError(error));
+    }
   } finally {
     ttUiFollowBusy.delete(key);
     ttUiScan();
@@ -231,6 +252,7 @@ function ttUiScan() {
   const own = ttUiOwnHandle();
   if (ttUiStateOwner !== ttUiOwner()) {
     ttUiFollowStates.clear();
+    ttUiFollowErrors.clear();
     ttUiStateOwner = ttUiOwner();
   }
   const articles = new Set(document.querySelectorAll('article[data-testid="tweet"]'));

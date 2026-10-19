@@ -168,3 +168,39 @@ test("follow failure keeps a retry button and explains the notification action",
   assert.equal(block.children[0].children[0].textContent, "重试关注");
   assert.equal(block.children[0].children[0].disabled, false);
 });
+
+test("follow failure displays the refusal code without exposing raw server text", async () => {
+  const user = { id: "123", followed: false };
+  const env = setup({ follow: async () => { throw Object.assign(new Error("private response text"), { status: 403, apiCode: 226 }); } });
+  await tick();
+  env.api.ttUiCacheUser("jack", user);
+  await env.api.ttUiFollow({ dataset: { ttHandle: "Jack" } });
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.match(block.children[1].textContent, /HTTP 403，错误码 226/);
+  assert.match(block.children[0].children[0].title, /页面原生关注按钮/);
+  assert.doesNotMatch(block.children[1].textContent, /private response/);
+});
+
+test("follow rate limits and login failures are distinguished and cleared after success", async () => {
+  for (const [status, expected] of [[429, /请求频繁/], [401, /登录状态已失效/]]) {
+    let fail = true;
+    const user = { id: "123", followed: false };
+    const env = setup({ follow: async () => {
+      if (fail) throw Object.assign(new Error("HTTP " + status), { status });
+      return { user: { ...user, followed: true }, status: "done" };
+    } });
+    await tick();
+    env.api.ttUiCacheUser("jack", user);
+    const button = { dataset: { ttHandle: "Jack" } };
+    await env.api.ttUiFollow(button);
+    const block = element("div");
+    env.api.ttUiRender(block, "Jack", user);
+    assert.match(block.children[1].textContent, expected);
+    fail = false;
+    await env.api.ttUiFollow(button);
+    env.api.ttUiRender(block, "Jack", { ...user, followed: true });
+    assert.equal(block.children.length, 1);
+    assert.equal(block.children[0].children[0].textContent, "已关注 · 通知已开启");
+  }
+});

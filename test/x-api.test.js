@@ -139,3 +139,14 @@ test("an already cancelled migration sends no API request", async () => {
   await assert.rejects(api.ttGql("Test", {}, true, { signal: controller.signal }), e => e.name === "AbortError");
   assert.equal(calls, 0);
 });
+
+test("REST rejections preserve HTTP status and X error code for follow diagnostics", async () => {
+  const { api } = setup({ fetch: async () => response({ errors: [{ code: 226, message: "Request refused" }] }, 403) });
+  await assert.rejects(api.ttRestPost("friendships/create.json", { user_id: "123" }),
+    error => error.status === 403 && error.apiCode === 226 && error.message === "Request refused");
+});
+
+test("GraphQL pre-follow errors preserve HTTP status and X error code", async () => {
+  const { api } = setup({ fetch: async () => response({ errors: [{ code: 89, message: "Invalid session" }] }, 401) });
+  await assert.rejects(api.ttGql("Test", {}, false), error => error.status === 401 && error.apiCode === 89);
+});

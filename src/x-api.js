@@ -73,10 +73,12 @@ function ttHeaders(bearer) {
 }
 
 // Error carrying the HTTP status and, for 429, when the rate limit resets (epoch seconds).
-function ttHttpError(res) {
-  const err = new Error("HTTP " + res.status);
+function ttHttpError(res, json) {
+  const detail = json?.errors?.[0];
+  const err = new Error(detail?.message || "HTTP " + res.status);
   err.status = res.status;
   err.resetAt = Number(res.headers.get("x-rate-limit-reset")) || 0;
+  if (Number.isInteger(detail?.code)) err.apiCode = detail.code;
   return err;
 }
 
@@ -114,11 +116,11 @@ async function ttGql(name, variables, mutation, opts = {}) {
       continue;
     }
     const json = await res.json().catch(() => null);
-    if (!res.ok || !json) throw ttHttpError(res);
+    if (!res.ok || !json) throw ttHttpError(res, json);
     // Even a partial GraphQL response can mean a mutation failed. Never remove a source-list member after it.
     const partialLists = opts.allowPartial && !mutation && name === "ListsManagementPageTimeline" && json.data &&
       json.errors?.every(error => /\bDecodeException\b/.test(error.message || ""));
-    if (json.errors?.length && !partialLists) throw new Error(json.errors[0].message || "接口错误");
+    if (json.errors?.length && !partialLists) throw ttHttpError(res, json);
     return json;
   }
 }
@@ -133,8 +135,7 @@ async function ttRestPost(path, form) {
     body: new URLSearchParams(form),
   });
   const json = await res.json().catch(() => null);
-  if (!res.ok || !json) throw ttHttpError(res);
-  if (json.errors?.length) throw new Error(json.errors[0].message || "接口错误");
+  if (!res.ok || !json || json.errors?.length) throw ttHttpError(res, json);
   return json;
 }
 
