@@ -39,9 +39,15 @@
 
 ### 设置弹窗
 
-按分区调整开关，顶部可打开列表迁移工具、导出或导入备注。
+按分区调整开关，顶部可打开列表迁移工具、导出或导入备注。下图使用 0.3.8 的设置页面代码在本地渲染，示例中已启用「Claude 风格」。
 
-<img src="assets/screenshots/popup.png" alt="Twitter Tools 设置弹窗" width="324" />
+<img src="assets/screenshots/popup-current.jpg" alt="Twitter Tools 0.3.8 设置页示例，包含 Claude 风格开关" width="324" />
+
+### Claude 风格
+
+暖米色背景、深灰文字和衬线正文，菜单保持界面字体。下图使用扩展的真实主题 CSS 和虚构账号内容在本地渲染，展示中英文阅读效果，不包含真实账号信息；实际字体随本机已安装字体而变化。
+
+<img src="assets/screenshots/claude-theme.jpg" alt="Claude 风格示例：暖色背景与中英文衬线正文，账号内容均为虚构" width="720" />
 
 ### 阅读界面与左侧菜单
 
