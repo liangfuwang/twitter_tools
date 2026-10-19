@@ -8,10 +8,7 @@ html.tt-navMessages header[role="banner"] nav [data-testid="AppTabBar_DirectMess
 html.tt-navCalls header[role="banner"] nav a[href="/i/calls"],
 html.tt-navGrok header[role="banner"] nav a[href="/i/grok"],
 html.tt-navPremium header[role="banner"] nav a[href="/i/premium"],
-/* Creator Studio: href not yet verified against the live DOM, so match loosely. */
-html.tt-navCreatorStudio header[role="banner"] nav a[href*="creator" i],
-html.tt-navCreatorStudio header[role="banner"] nav a[href*="studio" i],
-html.tt-navCreatorStudio header[role="banner"] nav [data-testid*="Creator" i],
+html.tt-navCreatorStudio header[role="banner"] nav a[href="/i/jf/creators/studio"],
 html.tt-navHistory header[role="banner"] nav a[href="/i/history"],
 html.tt-navProfile header[role="banner"] nav [data-testid="AppTabBar_Profile_Link"],
 html.tt-navMore header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] {
