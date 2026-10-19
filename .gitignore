@@ -8,3 +8,10 @@ node_modules/
 __pycache__/
 logs/
 .venv/
+
+# Internal agent and handoff docs (local only)
+AGENTS.md
+CLAUDE.md
+CODEBUDDY.md
+HANDOFF.md
+REVIEW.md
