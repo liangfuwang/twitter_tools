@@ -1,5 +1,5 @@
 body { width: 300px; margin: 12px; font: 13px system-ui, sans-serif; }
-h1 { font-size: 15px; margin: 0 0 8px; }
+h1 { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 0 0 8px; }
 .hint { margin: 0; color: #666; }
 h2 { font-size: 12px; margin: 12px 0 2px; color: #666; }
 label { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
