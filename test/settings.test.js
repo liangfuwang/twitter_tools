@@ -24,6 +24,7 @@ test("defaults: inject/hidden/on options are true, others false", () => {
   assert.equal(api.TT_DEFAULTS.noteToolbarBtn, undefined);
   assert.equal(api.TT_DEFAULTS.navHome, false);
   assert.equal(api.TT_DEFAULTS.navCreatorStudio, false);
+  assert.equal(api.TT_DEFAULTS.navArticles, false);
 });
 
 test("every native left-menu option has a CSS rule", () => {

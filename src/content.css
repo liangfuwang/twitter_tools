@@ -9,6 +9,7 @@ html.tt-navCalls header[role="banner"] nav a[href="/i/calls"],
 html.tt-navGrok header[role="banner"] nav a[href="/i/grok"],
 html.tt-navPremium header[role="banner"] nav a[href="/i/premium"],
 html.tt-navCreatorStudio header[role="banner"] nav a[href="/i/jf/creators/studio"],
+html.tt-navArticles header[role="banner"] nav a[href="/compose/articles"],
 html.tt-navHistory header[role="banner"] nav a[href="/i/history"],
 html.tt-navProfile header[role="banner"] nav [data-testid="AppTabBar_Profile_Link"],
 html.tt-navMore header[role="banner"] nav [data-testid="AppTabBar_More_Menu"] {

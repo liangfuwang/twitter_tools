@@ -12,6 +12,7 @@ const TT_SECTIONS = [
       { key: "navGrok", label: "Grok" },
       { key: "navPremium", label: "订阅" },
       { key: "navCreatorStudio", label: "创作者工作室" },
+      { key: "navArticles", label: "文章" },
       { key: "navHistory", label: "历史", hidden: true },
       { key: "navBookmarks", label: "书签", inject: "/i/bookmarks" },
       { key: "navLists", label: "列表", inject: "{user}/lists" },
