@@ -1,0 +1,107 @@
+/* Optional warm, serif reading theme. Local fonts only; removing the class restores X's own theme. */
+html.tt-claudeTheme {
+  color-scheme: light;
+  --tt-paper: #faf9f5;
+  --tt-surface: #f0eee6;
+  --tt-ink: #302f2b;
+  --tt-muted: #737168;
+  --tt-line: #dedbd1;
+  --tt-accent: #a34f36;
+  --tt-ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --tt-reading-font: "Anthropic Serif", Georgia, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  background-color: var(--tt-paper) !important;
+}
+
+html.tt-claudeTheme :is(body, #react-root, main, header[role="banner"], [data-testid="primaryColumn"], [data-testid="sidebarColumn"]) {
+  background-color: var(--tt-paper) !important;
+  color: var(--tt-ink) !important;
+}
+html.tt-claudeTheme body {
+  scrollbar-color: #c9c5b9 var(--tt-paper) !important;
+}
+html.tt-claudeTheme :is(body, button, input, textarea, select, .css-146c3p1) {
+  font-family: var(--tt-ui-font) !important;
+}
+
+/* X uses inline palette values as well as React Native Web surface classes, including sticky headers.
+   Keep opaque page surfaces warm even when X is set to its black/dim palette. Media pixels are untouched. */
+html.tt-claudeTheme :is(
+  .r-14lw9ot, .r-kemksi, .r-5zmot,
+  [style^="background-color: rgb(255, 255, 255)"], [style*="; background-color: rgb(255, 255, 255)"],
+  [style^="background-color: rgb(0, 0, 0)"], [style*="; background-color: rgb(0, 0, 0)"],
+  [style^="background-color: rgb(21, 32, 43)"], [style*="; background-color: rgb(21, 32, 43)"],
+  [role="dialog"], [role="menu"]
+):not(button):not([role="button"]) {
+  background-color: var(--tt-paper) !important;
+}
+html.tt-claudeTheme .r-1h3ijdo {
+  background-color: rgb(250 249 245 / 94%) !important;
+}
+
+/* Match text palette values, not every descendant: icons and primary-button labels keep their states. */
+html.tt-claudeTheme :is(
+  [style^="color: rgb(15, 20, 25)"], [style*="; color: rgb(15, 20, 25)"],
+  [style^="color: rgb(231, 233, 234)"], [style*="; color: rgb(231, 233, 234)"]
+) {
+  color: var(--tt-ink) !important;
+}
+html.tt-claudeTheme :is(
+  [style^="color: rgb(83, 100, 113)"], [style*="; color: rgb(83, 100, 113)"],
+  [style^="color: rgb(113, 118, 123)"], [style*="; color: rgb(113, 118, 123)"],
+  [style^="color: rgb(139, 152, 165)"], [style*="; color: rgb(139, 152, 165)"], .tt-ui
+) {
+  color: var(--tt-muted) !important;
+}
+html.tt-claudeTheme :is([data-testid="primaryColumn"], article[data-testid="tweet"], [data-testid="UserCell"], [role="tablist"]) {
+  border-color: var(--tt-line) !important;
+}
+
+html.tt-claudeTheme :is([data-testid="tweetText"], [data-testid="tweetTextarea_0"]),
+html.tt-claudeTheme :is([data-testid="tweetText"], [data-testid="tweetTextarea_0"]) :not(pre):not(code) {
+  font-family: var(--tt-reading-font) !important;
+  line-height: 1.7 !important;
+}
+html.tt-claudeTheme [data-testid="tweetText"] {
+  color: var(--tt-ink) !important;
+}
+html.tt-claudeTheme [data-testid="tweetText"] :not(a):not(a *) {
+  color: inherit !important;
+}
+html.tt-claudeTheme [data-testid="tweetText"] :is(pre, code, pre *, code *) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+}
+html.tt-claudeTheme [data-testid="tweetText"] a {
+  color: var(--tt-accent) !important;
+}
+
+html.tt-claudeTheme :is([data-testid="SideNav_NewTweet_Button"], [data-testid="tweetButton"], [data-testid="tweetButtonInline"]) {
+  color: #fff !important;
+  background-color: var(--tt-ink) !important;
+}
+html.tt-claudeTheme :is([data-testid="SideNav_NewTweet_Button"], [data-testid="tweetButton"], [data-testid="tweetButtonInline"]) * {
+  color: #fff !important;
+}
+html.tt-claudeTheme :is(.tt-ui-follow, .tt-note-actions .tt-note-primary) {
+  color: #fff !important;
+  background-color: var(--tt-accent) !important;
+}
+html.tt-claudeTheme :is(.tt-ui-follow:hover, .tt-note-actions .tt-note-primary:hover) {
+  background-color: #88412d !important;
+}
+html.tt-claudeTheme .tt-note-pill {
+  color: var(--tt-accent) !important;
+  background-color: #f0dfd6 !important;
+}
+html.tt-claudeTheme :is(.tt-note-dialog, #tt-lists-panel) {
+  color: var(--tt-ink) !important;
+  background-color: var(--tt-paper) !important;
+}
+html.tt-claudeTheme :is(.tt-note-dialog input, #tt-lists-panel select, #tt-lists-panel .tt-members) {
+  color: var(--tt-ink) !important;
+  background-color: var(--tt-paper) !important;
+  border-color: var(--tt-line) !important;
+}
+html.tt-claudeTheme :is(#tt-lists-panel button.tt-secondary, #tt-lists-panel .tt-members label:hover) {
+  color: var(--tt-ink) !important;
+  background-color: var(--tt-surface) !important;
+}

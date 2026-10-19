@@ -62,6 +62,7 @@ const TT_SECTIONS = [
   {
     title: "外观（勾选 = 启用）",
     options: [
+      { key: "claudeTheme", label: "Claude 风格（暖色背景、衬线正文）" },
       { key: "compactNav", label: "紧凑左侧栏（更窄，字号适中）", on: true },
       { key: "widenTimeline", label: "加宽时间线（最宽 900px）", on: true },
       { key: "bigTabs", label: "顶部标签字号与左栏一致（17px）" },
