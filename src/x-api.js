@@ -81,6 +81,8 @@ function ttHttpError(res) {
 }
 
 // opts.retry = false: throw on 429 instead of waiting and retrying (for background fetches).
+// opts.allowPartial = true: only the list overview's known DecodeException can retain query data.
+// Members and all mutations remain strict; ttFetchLists must still verify usable list records.
 async function ttGql(name, variables, mutation, opts = {}) {
   const { ops, bearer } = await ttGetOps([name]);
   const op = ops[name];
@@ -114,7 +116,9 @@ async function ttGql(name, variables, mutation, opts = {}) {
     const json = await res.json().catch(() => null);
     if (!res.ok || !json) throw ttHttpError(res);
     // Even a partial GraphQL response can mean a mutation failed. Never remove a source-list member after it.
-    if (json.errors?.length) throw new Error(json.errors[0].message || "接口错误");
+    const partialLists = opts.allowPartial && !mutation && name === "ListsManagementPageTimeline" && json.data &&
+      json.errors?.every(error => /\bDecodeException\b/.test(error.message || ""));
+    if (json.errors?.length && !partialLists) throw new Error(json.errors[0].message || "接口错误");
     return json;
   }
 }
@@ -145,12 +149,14 @@ function ttWalk(node, visit) {
   }
 }
 
+// Resolves with { lists, partial }. X can return list records plus an unrelated strato DecodeException.
+// Keep validated records and report the partial result. Errors without usable lists still fail.
 async function ttFetchLists() {
-  const json = await ttGql("ListsManagementPageTimeline", { count: 100 });
+  const json = await ttGql("ListsManagementPageTimeline", { count: 100 }, false, { allowPartial: true });
   const me = ttOwnId();
   const seen = new Map();
   ttWalk(json, (o) => {
-    if (o.__typename === "TimelineTwitterList" && o.list?.id_str) {
+    if (o.__typename === "TimelineTwitterList" && typeof o.list?.id_str === "string" && o.list.id_str && typeof o.list.name === "string") {
       const l = o.list;
       seen.set(l.id_str, {
         id: l.id_str,
@@ -160,5 +166,6 @@ async function ttFetchLists() {
       });
     }
   });
-  return [...seen.values()];
+  if (json.errors?.length && !seen.size) throw new Error(json.errors[0].message || "无法读取列表");
+  return { lists: [...seen.values()], partial: !!json.errors?.length };
 }

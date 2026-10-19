@@ -32,8 +32,8 @@ function ttNavigate(e, href) {
 // X draws hover/pressed feedback from JS, which the clone lacks. Reproduce it with the label's text colour
 // (dark text on light themes, light text on dark ones) at 10% on hover and 20% while pressed.
 function ttAddFeedback(link) {
-  const inner = link.firstElementChild;
-  const label = link.querySelector('[dir="ltr"]');
+  const inner = link.firstElementChild || link;
+  const label = link.querySelector('[dir="ltr"]') || link;
   const set = (pct) => {
     inner.style.backgroundColor = pct
       ? "color-mix(in srgb, " + getComputedStyle(label).color + " " + pct + "%, transparent)"
@@ -69,8 +69,11 @@ function ttInject() {
       link.addEventListener("click", (e) => ttNavigate(e, href));
       ttAddFeedback(link);
       link.setAttribute("aria-label", label);
-      link.querySelector("svg path").setAttribute("d", TT_ICONS[key]);
-      link.querySelector("span").textContent = label;
+      link.removeAttribute("aria-current");
+      link.querySelector("svg path")?.setAttribute("d", TT_ICONS[key]);
+      // X omits label spans entirely in its icon-only nav layout.
+      const text = link.querySelector("span");
+      if (text) text.textContent = label;
       more.before(link);
     }
   }

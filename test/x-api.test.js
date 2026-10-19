@@ -18,7 +18,7 @@ function setup({ reply, fetch = async () => response({ data: {} }), ...extra } =
       if (data !== undefined) for (const fn of [...listeners]) fn({ detail: typeof data === "string" ? data : JSON.stringify(data) });
     },
   };
-  const api = load("src/x-api.js", ["ttGetOps", "ttGql", "ttRestPost", "ttSleep", "ttWalk"], {
+  const api = load("src/x-api.js", ["ttGetOps", "ttGql", "ttRestPost", "ttSleep", "ttWalk", "ttFetchLists"], {
     document, CustomEvent: class {}, setTimeout, clearTimeout, URLSearchParams, fetch, ...extra,
   });
   return { api, listeners, requests: () => requests };
@@ -60,6 +60,47 @@ test("bridge timeout removes its response listener", async () => {
 test("GraphQL partial mutation errors are failures even with data present", async () => {
   const { api } = setup({ fetch: async () => response({ data: { result: null }, errors: [{ message: "add failed" }] }) });
   await assert.rejects(api.ttGql("Test", {}, true), /add failed/);
+});
+
+test("partial tolerance is limited to list overview decoding errors, never other queries or mutations", async () => {
+  const partial = { data: { ok: true }, errors: [{ message: "DecodeException" }] };
+  const { api } = setup({ fetch: async () => response(partial), reply: () => ({ bearer: "test-only", ops: {
+    Test: { id: "test-query", features: [], toggles: [] },
+    ListsManagementPageTimeline: { id: "lists-query", features: [], toggles: [] },
+  } }) });
+  assert.equal((await api.ttGql("ListsManagementPageTimeline", {}, false, { allowPartial: true })).data.ok, true);
+  await assert.rejects(api.ttGql("Test", {}, false, { allowPartial: true }), /DecodeException/);
+  await assert.rejects(api.ttGql("Test", {}, false), /DecodeException/);
+  await assert.rejects(api.ttGql("ListsManagementPageTimeline", {}, true, { allowPartial: true }), /DecodeException/);
+  const empty = setup({ fetch: async () => response({ errors: [{ message: "no data" }] }) });
+  await assert.rejects(empty.api.ttGql("Test", {}, false, { allowPartial: true }), /no data/);
+});
+
+test("list overview rejects authentication errors and decoding errors without valid lists", async () => {
+  const list = { __typename: "TimelineTwitterList", list: { id_str: "1", name: "Example" } };
+  for (const json of [
+    { data: { list }, errors: [{ message: "Unauthorized" }] },
+    { data: { list }, errors: [{ message: "DecodeException" }, { message: "Unauthorized" }] },
+    { data: {}, errors: [{ message: "DecodeException" }] },
+    { data: { malformed: { __typename: "TimelineTwitterList", list: { id_str: "1" } } }, errors: [{ message: "DecodeException" }] },
+  ]) {
+    const { api } = setup({
+      reply: () => ({ bearer: "test-only", ops: { ListsManagementPageTimeline: { id: "lists-query", features: [], toggles: [] } } }),
+      fetch: async () => response(json),
+    });
+    await assert.rejects(api.ttFetchLists());
+  }
+});
+
+test("list overview keeps partial data and reports it", async () => {
+  const list = (id, owner) => ({ __typename: "TimelineTwitterList", list: { id_str: id, name: id, member_count: 1, user_results: { result: { rest_id: owner } } } });
+  const { api } = setup({
+    reply: () => ({ bearer: "test-only", ops: { ListsManagementPageTimeline: { id: "lists-query", features: [], toggles: [] } } }),
+    fetch: async () => response({ data: { a: list("mine", "123"), b: list("other", "999") }, errors: [{ message: "DecodeException" }] }),
+  });
+  const { lists, partial } = await api.ttFetchLists();
+  assert.equal(partial, true);
+  assert.equal(JSON.stringify(lists.map((l) => [l.id, l.mine])), JSON.stringify([["mine", true], ["other", false]]));
 });
 
 test("REST errors in a successful HTTP response are failures", async () => {

@@ -39,10 +39,10 @@ async function setup(mutate = async () => ({ data: {} })) {
     document: { body, createElement: tag => new Element(tag) },
     chrome: { runtime: { onMessage: { addListener() {} } } },
     AbortController, confirm: () => true, ttSleep: async () => {}, ttWalk,
-    ttFetchLists: async () => [
+    ttFetchLists: async () => ({ lists: [
       { id: "source", name: "Source", count: 1, mine: true },
       { id: "target", name: "Target", count: 0, mine: true },
-    ],
+    ], partial: false }),
     ttGql: async (name, vars, mutation, opts) => {
       opts?.signal?.throwIfAborted();
       if (!mutation) return { users: [{ __typename: "User", rest_id: "123", core: { name: "User", screen_name: "testuser" } }] };

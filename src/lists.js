@@ -118,14 +118,16 @@ async function ttOpenListsTool() {
 
   try {
     say("正在读取列表…");
-    lists = await ttFetchLists();
+    let partial;
+    ({ lists, partial } = await ttFetchLists());
     for (const l of lists) {
       const text = l.name + "（" + l.count + " 人）" + (l.mine ? "" : " · 他人创建");
       srcSel.append(ttEl("option", { value: l.id, textContent: text }));
       if (l.mine) dstSel.append(ttEl("option", { value: l.id, textContent: text }));
     }
     if (dstSel.options.length > 1) dstSel.selectedIndex = 1;
-    say(lists.length ? "选择源列表和目标列表，然后点“加载成员”。" : "没有找到列表。");
+    say((lists.length ? "选择源列表和目标列表，然后点“加载成员”。" : "没有找到列表。") +
+      (partial ? "X 返回了部分错误，列表可能不完整。" : ""));
   } catch (err) {
     say("读取列表失败：" + err.message);
     return;
