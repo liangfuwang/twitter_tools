@@ -54,6 +54,30 @@ function ttStatusInfo(article) {
   return { handle: handle || "tweet", id: id || String(Date.now()), url: href ? "https://x.com" + href : location.href };
 }
 
+// Drawing cross-origin video frames (or page-owned canvases) taints the export canvas.
+// Keep a static cover and an explicit link instead of asking html-to-image to read their pixels.
+function ttStaticMedia(copy, url) {
+  for (const media of copy.querySelectorAll('[data-testid="videoPlayer"], video, canvas, iframe')) {
+    if (!copy.contains(media)) continue;
+    const video = media.tagName === "VIDEO" ? media : media.querySelector("video");
+    const poster = video?.poster || video?.getAttribute("poster");
+    const card = document.createElement("div");
+    card.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:80px;padding:12px;box-sizing:border-box;border:1px solid #aab8c2;border-radius:12px;overflow:hidden;font:14px sans-serif;";
+    if (poster && /^(https?:|data:image\/)/i.test(poster)) {
+      const image = document.createElement("img");
+      image.src = poster;
+      image.alt = "视频封面";
+      image.style.cssText = "display:block;width:100%;aspect-ratio:16/9;max-height:480px;object-fit:contain;";
+      card.append(image);
+    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.textContent = video ? "视频（请查看原帖）" : "动态内容（请查看原帖）";
+    card.append(link);
+    media.replaceWith(card);
+  }
+}
+
 // X renders some parts in ways that do not survive html-to-image (rolling view-count digits, header buttons), so the
 // image is taken from an off-screen copy of the post with those parts removed or flattened.
 function ttCleanCopy(article) {
@@ -100,6 +124,7 @@ function ttCleanCopy(article) {
     el.style.flexShrink = "0";
     el.style.whiteSpace = "nowrap";
   }
+  ttStaticMedia(copy, ttStatusInfo(article).url);
   copy.style.borderBottom = "none";
   return copy;
 }
@@ -108,15 +133,16 @@ async function ttExportImage(article) {
   const info = ttStatusInfo(article);
   const holder = document.createElement("div");
   holder.style.cssText = "position:fixed;top:0;left:-100000px;width:" + article.getBoundingClientRect().width + "px;";
-  const copy = ttCleanCopy(article);
-  holder.append(copy);
-  document.body.append(holder);
   try {
+    const copy = ttCleanCopy(article);
+    holder.append(copy);
+    document.body.append(holder);
     ttToast("正在生成图片…");
     const dataUrl = await htmlToImage.toPng(copy, {
       pixelRatio: 2,
       skipFonts: true,
       backgroundColor: getComputedStyle(document.body).backgroundColor,
+      imagePlaceholder: "data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#eeeeee"/><text x="50%" y="50%" text-anchor="middle" fill="#555555" font-family="sans-serif" font-size="18">图片暂不可用</text></svg>'),
     });
     ttDownload(dataUrl, info.handle + "-" + info.id + ".png");
   } catch (err) {
