@@ -36,6 +36,15 @@ const TT_SECTIONS = [
     options: [
       { key: "userInfoBio", label: "在帖子下方显示作者简介" },
       { key: "quickFollow", label: "快速关注按钮（关注并开启对方的发帖通知）", on: true },
+      { key: "authorFollowers", label: "显示作者粉丝数", on: true },
+      { key: "authorLarge", label: "大V 标签（粉丝不少于 10 万）", on: true },
+      { key: "authorVeteran", label: "老号标签（注册满 5 年）", on: true },
+    ],
+  },
+  {
+    title: "帖子热度（勾选 = 启用）",
+    options: [
+      { key: "postViewRate", label: "每小时平均浏览量（总浏览量 ÷ 发布时长）", on: true },
     ],
   },
   {
@@ -124,6 +133,8 @@ function ttParseUser(r) {
   return {
     id: r.rest_id,
     bio: bio.trim(),
+    followers: ttMetricNumber(r.relationship_counts?.followers ?? legacy.followers_count),
+    createdAt: ttValidDate(r.core?.created_at ?? legacy.created_at ?? r.created_at),
     followed: Boolean(rp.following ?? legacy.following),
     requested: Boolean(r.follow_request_sent ?? legacy.follow_request_sent),
     blocking: Boolean(rp.blocking),
@@ -133,4 +144,72 @@ function ttParseUser(r) {
 
 function ttLoadSettings() {
   return chrome.storage.sync.get(TT_DEFAULTS);
+}
+
+// Missing or malformed counts must not be presented as zero followers.
+function ttMetricNumber(value) {
+  if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) return null;
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
+}
+
+function ttValidDate(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function ttFormatFollowers(value) {
+  const count = ttMetricNumber(value);
+  if (count === null) return null;
+  if (count >= 1e8) return Number((count / 1e8).toFixed(1)) + "亿";
+  if (count >= 1e4) return Number((count / 1e4).toFixed(1)) + "万";
+  return count.toLocaleString("zh-CN");
+}
+
+function ttAuthorBadges(user, flags, now = Date.now()) {
+  const badges = [];
+  const count = ttMetricNumber(user.followers);
+  if (flags.authorFollowers && count !== null) badges.push({ kind: "followers", text: ttFormatFollowers(count) + "粉丝", title: "粉丝数：" + count.toLocaleString("zh-CN") });
+  if (flags.authorLarge && count !== null && count >= 100000) badges.push({ kind: "large", text: "大V", title: "粉丝不少于 10 万；不代表 X 官方认证" });
+  const joined = ttValidDate(user.createdAt);
+  if (flags.authorVeteran && joined && Date.parse(joined) <= now) {
+    const anniversary = new Date(joined);
+    anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 5);
+    if (anniversary.getTime() <= now) badges.push({ kind: "veteran", text: "老号", title: "注册满 5 年 · 注册于 " + joined.slice(0, 10) });
+  }
+  return badges;
+}
+
+// Prefer the native analytics link's exact aria-label; compact labels remain estimates.
+function ttParseViewCount(text) {
+  if (typeof text !== "string") return null;
+  const match = text.trim().match(/^(\d[\d.,\s\u00a0\u202f]*)([kKmMbB](?![A-Za-z])|[万萬亿億])?/);
+  if (!match) return null;
+  let numeric = match[1].replace(/[\s\u00a0\u202f]/g, "");
+  const suffix = match[2]?.toLowerCase();
+  if (suffix) {
+    if (/^\d+,\d{1,2}$/.test(numeric)) numeric = numeric.replace(",", ".");
+    else numeric = numeric.replace(/,/g, "");
+  } else {
+    if (/^\d{1,3}(?:[.,]\d{3})+$/.test(numeric)) numeric = numeric.replace(/[.,]/g, "");
+    else if (!/^\d+$/.test(numeric)) return null;
+  }
+  const factor = { k: 1e3, m: 1e6, b: 1e9, "万": 1e4, "萬": 1e4, "亿": 1e8, "億": 1e8 }[suffix] || 1;
+  return ttMetricNumber(Number(numeric) * factor);
+}
+
+function ttAverageViewsPerHour(views, createdAt, now = Date.now()) {
+  const count = ttMetricNumber(views);
+  const time = ttValidDate(createdAt);
+  const elapsed = time ? now - Date.parse(time) : 0;
+  if (count === null || !Number.isFinite(elapsed) || elapsed < 60000) return null;
+  return count * 3600000 / elapsed;
+}
+
+function ttFormatViewRate(rate) {
+  if (!Number.isFinite(rate) || rate < 0) return null;
+  if (rate >= 1e6) return Number((rate / 1e6).toFixed(1)) + "m/h";
+  if (rate >= 1e3) return Number((rate / 1e3).toFixed(1)) + "k/h";
+  return Math.round(rate) + "/h";
 }

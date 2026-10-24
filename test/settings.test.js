@@ -72,7 +72,7 @@ test("handles matching object property names do not inherit or lose notes", () =
 });
 
 test("new options default on (hideBadges hidden, author info enabled)", () => {
-  for (const k of ["hideBadges", "quickFollow"]) assert.equal(api.TT_DEFAULTS[k], true, k);
+  for (const k of ["hideBadges", "quickFollow", "authorFollowers", "authorLarge", "authorVeteran", "postViewRate"]) assert.equal(api.TT_DEFAULTS[k], true, k);
   assert.equal(api.TT_DEFAULTS.userInfoBio, false);
 });
 
@@ -90,7 +90,7 @@ test("ttParseUser reads the current schema and expands bio links", () => {
     },
   });
   assert.deepEqual({ ...u }, {
-    id: "12", bio: "hi primal.net/jack",
+    id: "12", bio: "hi primal.net/jack", followers: 100, createdAt: null,
     followed: true, requested: false, blocking: false, protected: false,
   });
 });

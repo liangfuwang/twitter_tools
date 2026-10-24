@@ -1,12 +1,12 @@
-// Author info under each post header: a quick-follow button and (optionally) the bio, so there is no need to open
-// the profile. Loaded after notes.js (reuses ttNoteHandle) and x-api.js. Data comes from X's UserByScreenName query,
+// Author info under each post header: follower/age badges, a quick-follow button and (optionally) the bio.
+// Loaded after notes.js (reuses ttNoteHandle) and x-api.js. Data comes from X's UserByScreenName query,
 // fetched only for posts near the viewport, one at a time, and cached in chrome.storage.local.
 // Feature flags are read from the tt-* classes content.js puts on <html>.
 
 const TT_UI_KEY = "ttUserCache";
 const TT_UI_TTL = 12 * 3600 * 1000;
 const TT_UI_MAX = 800;
-const TT_UI_CACHE_VERSION = 2;
+const TT_UI_CACHE_VERSION = 3;
 
 let ttUiCache = Object.create(null); // { <lowercase handle>: { t: fetched at, u: ttParseUser result, or null for "no such user" } }
 let ttUiReady = false;
@@ -45,7 +45,15 @@ let ttUiRunning = false;
 let ttUiPausedUntil = 0;
 
 function ttUiNeeded() {
-  return ttUiOn("userInfoBio") || ttUiOn("quickFollow");
+  return ttUiOn("userInfoBio") || ttUiOn("quickFollow") || ttUiStatsOn();
+}
+
+const ttUiStatsOn = () => ["authorFollowers", "authorLarge", "authorVeteran"].some(ttUiOn);
+
+function ttUiActionsAllowed(handle, own = ttUiOwnHandle()) {
+  const key = handle.toLowerCase();
+  const [first, second] = location.pathname.split("/").slice(1);
+  return key !== own && !(first?.toLowerCase() === key && second !== "status");
 }
 
 function ttUiWant(handle) {
@@ -102,16 +110,12 @@ function ttUiOwnHandle() {
   return href ? href.slice(1).toLowerCase() : "";
 }
 
-// The post's author handle, or null when the block should not be shown (own posts, posts on the author's own profile).
+// Metadata may appear on self/profile posts; follow/bio controls retain their existing exclusions.
 function ttUiHandleOf(article, own) {
   const userName = article.querySelector('[data-testid="User-Name"]');
   const handle = userName && ttNoteHandle(userName);
   if (!handle) return null;
-  const key = handle.toLowerCase();
-  if (key === own) return null;
-  const [first, second] = location.pathname.split("/").slice(1);
-  if (first?.toLowerCase() === key && second !== "status") return null;
-  return handle;
+  return ttUiStatsOn() || ttUiActionsAllowed(handle, own) ? handle : null;
 }
 
 // The block goes right under the post header (name row): the header is the child of the content column
@@ -135,16 +139,27 @@ function ttUiEl(tag, cls, text) {
 }
 
 function ttUiRender(block, handle, u) {
-  const bio = ttUiOn("userInfoBio");
-  const follow = ttUiOn("quickFollow");
+  const actions = ttUiActionsAllowed(handle);
+  const bio = actions && ttUiOn("userInfoBio");
+  const follow = actions && ttUiOn("quickFollow");
+  const badges = ttAuthorBadges(u, {
+    authorFollowers: ttUiOn("authorFollowers"),
+    authorLarge: ttUiOn("authorLarge"),
+    authorVeteran: ttUiOn("authorVeteran"),
+  });
   const state = ttUiFollowState(handle);
   const busy = ttUiFollowBusy.has(handle.toLowerCase());
   const error = ttUiFollowErrors.get(handle.toLowerCase());
-  const sig = [handle, bio, follow, u.bio, state, busy, u.followed, u.requested, u.blocking, error].join("|");
+  const sig = [handle, bio, follow, u.bio, state, busy, u.followed, u.requested, u.blocking, error, JSON.stringify(badges)].join("|");
   if (block.dataset.ttSig === sig) return;
   block.dataset.ttSig = sig;
   block.textContent = "";
   const row = ttUiEl("div", "tt-ui-row");
+  for (const badge of badges) {
+    const el = ttUiEl("span", "tt-author-badge tt-author-" + badge.kind, badge.text);
+    el.title = badge.title;
+    row.append(el);
+  }
   if (follow && !u.blocking && (!u.followed || state || busy)) row.append(ttUiFollowControl(handle, u));
   if (row.children.length) block.append(row);
   if (follow && error) block.append(ttUiEl("div", "tt-ui-error", error));

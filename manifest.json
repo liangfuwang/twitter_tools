@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Twitter Tools",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "优化 Twitter/X 的阅读体验。",
   "icons": {
     "16": "assets/icons/icon-16.png",
@@ -24,7 +24,7 @@
   "content_scripts": [
     {
       "matches": ["https://x.com/*", "https://twitter.com/*"],
-      "js": ["src/settings.js", "src/x-api.js", "src/follow.js", "src/content.js", "lib/html-to-image.js", "src/export.js", "src/notes.js", "src/userinfo.js"],
+      "js": ["src/settings.js", "src/x-api.js", "src/follow.js", "src/content.js", "lib/html-to-image.js", "src/export.js", "src/notes.js", "src/userinfo.js", "src/insights.js"],
       "css": ["src/content.css", "src/claude-theme.css"],
       "run_at": "document_start"
     },

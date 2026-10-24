@@ -74,6 +74,11 @@ html.tt-widenTimeline [data-testid="primaryColumn"] div:has(> section) { max-wid
 .tt-ui { margin: 2px 0 8px; color: rgb(113, 118, 123); font-size: 13px; line-height: 16px; }
 .tt-ui[hidden] { display: none; }
 .tt-ui-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tt-author-badge { display: inline-block; padding: 1px 6px; border-radius: 5px; font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+.tt-author-followers { background: #fff1cc; color: #936516; }
+.tt-author-large { background: #e5f5ed; color: #197657; }
+.tt-author-veteran { background: #e9ecef; color: #55606a; }
+.tt-post-rate { display: inline-block; flex-shrink: 0; align-self: center; margin-inline: 6px 4px; padding: 1px 7px; border-radius: 9999px; background: #fce2de; color: #ad3830; font: 700 12px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; white-space: nowrap; }
 .tt-ui-tag { padding: 0 6px; border: 1px solid rgba(113, 118, 123, 0.5); border-radius: 9999px; font-size: 12px; }
 .tt-ui-follow { padding: 1px 10px; border: 0; border-radius: 9999px; background: #1d9bf0; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .tt-ui-follow:hover { background: #1a8cd8; }

@@ -1,24 +1,25 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./helpers");
+const { ttAuthorBadges } = load("src/settings.js", ["ttAuthorBadges"]);
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function setup({ query = async () => ({ data: {} }), sleep = async () => {},
   follow = async () => ({ user: {}, status: "done" }),
-  viewer = () => "viewer", cache = {} } = {}) {
+  viewer = () => "viewer", cache = {}, ownHandle = "", pathname = "/home" } = {}) {
   const articles = [];
   const flags = new Set(["tt-quickFollow"]);
   const observed = new Set();
   let intersect;
   const document = {
     documentElement: { classList: { contains: key => flags.has(key) } },
-    querySelector: () => null,
+    querySelector: () => ownHandle ? { getAttribute: () => "/" + ownHandle } : null,
     querySelectorAll: selector => selector.startsWith("article") ? articles : [],
     createElement: element,
     addEventListener() {},
   };
-  const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiCacheUser", "ttUiFresh", "ttUiFollow", "ttUiRender"], {
-    document, location: { pathname: "/home" },
+  const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiCacheUser", "ttUiFresh", "ttUiFollow", "ttUiRender", "ttUiHandleOf"], {
+    document, location: { pathname },
     chrome: { storage: { local: { get: async () => ({ ttUserCache: cache }), set: async () => {} } } },
     MutationObserver: class { observe() {} },
     IntersectionObserver: class {
@@ -30,7 +31,7 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
     ttNoteHandle: box => box.handle,
     ttOwnId: viewer,
     ttFollowAndNotifyUser: follow,
-    ttParseUser: () => null,
+    ttParseUser: () => null, ttAuthorBadges,
     ttGql: query, ttSleep: sleep, setTimeout: () => 0, clearTimeout,
   });
   function article(handle) {
@@ -144,7 +145,7 @@ test("follow uses the combined operation and deduplicates clicks", async () => {
 
 test("follow renders pending approval and restores notification retry after reload", async () => {
   const user = { id: "123", followed: true };
-  const env = setup({ cache: { jack: { v: 2, owner: "viewer", t: Date.now(), u: user, followStatus: "notifyFailed" } } });
+  const env = setup({ cache: { jack: { v: 3, owner: "viewer", t: Date.now(), u: user, followStatus: "notifyFailed" } } });
   await tick();
   const block = element("div");
   env.api.ttUiRender(block, "Jack", user);
@@ -202,5 +203,59 @@ test("follow rate limits and login failures are distinguished and cleared after 
     env.api.ttUiRender(block, "Jack", { ...user, followed: true });
     assert.equal(block.children.length, 1);
     assert.equal(block.children[0].children[0].textContent, "已关注 · 通知已开启");
+  }
+});
+
+test("author badges render independently, including for followed authors", async () => {
+  const env = setup();
+  await tick();
+  env.flags.clear();
+  env.flags.add("tt-authorFollowers");
+  env.flags.add("tt-authorLarge");
+  env.flags.add("tt-authorVeteran");
+  const user = { id: "123", followed: true, followers: 379000, createdAt: "2010-01-01T00:00:00Z" };
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.deepEqual(block.children[0].children.map(b => b.textContent), ["37.9万粉丝", "大V", "老号"]);
+  env.flags.delete("tt-authorFollowers");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.deepEqual(block.children[0].children.map(b => b.textContent), ["大V", "老号"]);
+});
+
+test("enabling author badges alone observes posts, but the rate-only setting does not fetch authors", async () => {
+  const env = setup();
+  await tick();
+  env.flags.clear();
+  env.flags.add("tt-postViewRate");
+  const article = env.article("Jack");
+  env.articles.push(article);
+  env.api.ttUiScan();
+  assert.equal(env.observed.size, 0);
+  env.flags.add("tt-authorLarge");
+  env.api.ttUiScan();
+  assert.ok(env.observed.has(article));
+});
+
+test("old author caches without metadata are refreshed while pending follow status survives", async () => {
+  const user = { id: "123", followed: true };
+  const env = setup({ cache: { jack: { v: 2, owner: "viewer", t: Date.now(), u: user, followStatus: "notifyFailed" } } });
+  await tick();
+  assert.equal(env.api.ttUiFresh("jack"), false);
+  env.api.ttUiCacheUser("jack", { ...user, followers: 379000 });
+  const block = element("div");
+  env.api.ttUiRender(block, "Jack", user);
+  assert.match(block.children[0].children[0].title, /已关注，通知未确认/);
+});
+
+test("badges can appear for self and profile posts without introducing quick-follow buttons", async () => {
+  for (const context of [{ ownHandle: "jack" }, { pathname: "/Jack" }]) {
+    const env = setup(context);
+    await tick();
+    env.flags.add("tt-authorFollowers");
+    const user = { id: "123", followed: false, followers: 100 };
+    assert.equal(env.api.ttUiHandleOf(env.article("Jack"), context.ownHandle || ""), "Jack");
+    const block = element("div");
+    env.api.ttUiRender(block, "Jack", user);
+    assert.deepEqual(block.children[0].children.map(b => b.textContent), ["100粉丝"]);
   }
 });
