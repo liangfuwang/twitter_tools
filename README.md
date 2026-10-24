@@ -42,7 +42,7 @@
 
 ## 截图
 
-设置弹窗与 Claude 风格示例采用两倍像素截图，点击图片可查看原图。
+完整设置面板为三倍像素 PNG；作者标签与帖子热度、Claude 风格示例为两倍像素图片，点击可查看原图。
 
 ### 作者标签与帖子热度
 
@@ -52,9 +52,9 @@
 
 ### 设置弹窗
 
-按分区调整开关，顶部可打开列表迁移工具、导出或导入备注。下图使用 0.3.8 的设置页面代码在本地渲染，示例中已启用「Claude 风格」。
+按分区调整开关，顶部可打开列表迁移工具、导出或导入备注。下图使用 0.4.0 的设置页面代码在本地渲染，包含全部功能开关，示例中已启用「Claude 风格」。原图为 972×4143 像素的无损 PNG。
 
-<img src="assets/screenshots/popup-current-2x.jpg" alt="Twitter Tools 0.3.8 设置页示例，包含 Claude 风格开关" width="324" />
+<img src="assets/screenshots/popup-0.4.0-hd.png" alt="Twitter Tools 0.4.0 完整设置面板，包含作者标签、帖子热度和 Claude 风格开关" width="324" />
 
 ### Claude 风格
 
