@@ -22,12 +22,32 @@
   }
 
   let cache;
+  function featureValues(ops) {
+    // Copy only declared boolean flags, never the surrounding account/session state.
+    const fs = window.__INITIAL_STATE__?.featureSwitch;
+    const configs = [fs?.defaultConfig, fs?.config, fs?.user?.config, fs?.customOverrides];
+    return Object.fromEntries(Object.entries(ops).map(([name, op]) => {
+      const values = {};
+      for (const key of op.features) {
+        for (const config of configs) {
+          const entry = config?.[key];
+          const value = typeof entry === "boolean" ? entry : entry?.value;
+          if (typeof value === "boolean") values[key] = value;
+        }
+      }
+      return [name, { ...op, featureValues: values }];
+    }));
+  }
+
   document.addEventListener("tt-ops-request", () => {
     let result = cache;
     if (!result) {
       result = scan();
       if (result.bearer && OPS.every((o) => result.ops[o])) cache = result;
     }
-    document.dispatchEvent(new CustomEvent("tt-ops-response", { detail: JSON.stringify(result) }));
+    // Query metadata can be cached; feature values may change with the active account.
+    document.dispatchEvent(new CustomEvent("tt-ops-response", {
+      detail: JSON.stringify({ ...result, ops: featureValues(result.ops) }),
+    }));
   });
 })();

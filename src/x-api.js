@@ -53,8 +53,8 @@ function ttFetchOps() {
 }
 
 // Resolves with { bearer, ops } once every operation in `needed` is known.
-async function ttGetOps(needed = []) {
-  if (!ttOpsCache || !needed.every((n) => ttOpsCache.ops[n])) {
+async function ttGetOps(needed = [], refresh = false) {
+  if (refresh || !ttOpsCache || !needed.every((n) => ttOpsCache.ops[n])) {
     const data = await ttFetchOps();
     if (data.bearer) ttOpsCache = { bearer: data.bearer, ops: { ...ttOpsCache?.ops, ...data.ops } };
   }
@@ -86,9 +86,12 @@ function ttHttpError(res, json) {
 // opts.allowPartial = true: only the list overview's known DecodeException can retain query data.
 // Members and all mutations remain strict; ttFetchLists must still verify usable list records.
 async function ttGql(name, variables, mutation, opts = {}) {
-  const { ops, bearer } = await ttGetOps([name]);
+  const { ops, bearer } = await ttGetOps([name], mutation && /^List(?:Add|Remove)Member$/.test(name));
   const op = ops[name];
-  const features = Object.fromEntries(op.features.map((f) => [f, true]));
+  // Feature names are not feature values. Preserve X's false flags; do not opt into
+  // unknown experimental response schemas when the initial state has no value.
+  const features = Object.fromEntries(op.features.map((f) => [f, op.featureValues?.[f] === true]));
+  const fieldToggles = Object.fromEntries(op.toggles.map((f) => [f, false]));
 
   const headers = ttHeaders(bearer);
   for (let attempt = 0; ; attempt++) {
@@ -100,13 +103,13 @@ async function ttGql(name, variables, mutation, opts = {}) {
         credentials: "include",
         signal: opts.signal,
         headers: { ...headers, "content-type": "application/json" },
-        body: JSON.stringify({ variables, features, queryId: op.id }),
+        body: JSON.stringify({ variables, features, fieldToggles, queryId: op.id }),
       });
     } else {
       const params = new URLSearchParams({
         variables: JSON.stringify(variables),
         features: JSON.stringify(features),
-        fieldToggles: JSON.stringify(Object.fromEntries(op.toggles.map((f) => [f, false]))),
+        fieldToggles: JSON.stringify(fieldToggles),
       });
       res = await fetch("/i/api/graphql/" + op.id + "/" + name + "?" + params, { credentials: "include", headers, signal: opts.signal });
     }

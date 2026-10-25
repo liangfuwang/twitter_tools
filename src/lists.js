@@ -6,12 +6,15 @@ const TT_LIST_DELAY = 400; // ms between write calls
 
 async function ttFetchMembers(listId, onProgress, signal) {
   const users = new Map();
+  const cursors = new Set();
   let cursor;
   for (let page = 0; page < 200; page++) {
     const json = await ttGql("ListMembers", { listId, count: 100, ...(cursor && { cursor }) }, false, { signal });
+    const instructions = json.data?.list?.members_timeline?.timeline?.instructions;
+    if (!Array.isArray(instructions)) throw new Error("X 返回的列表成员格式无效，无法确认完整成员状态");
     const before = users.size;
     let next;
-    ttWalk(json, (o) => {
+    ttWalk(instructions, (o) => {
       if (o.__typename === "User" && o.rest_id) {
         users.set(o.rest_id, {
           id: o.rest_id,
@@ -23,11 +26,37 @@ async function ttFetchMembers(listId, onProgress, signal) {
       if (o.cursorType === "Bottom" && o.value) next = o.value;
     });
     onProgress?.(users.size);
-    if (users.size === before || !next || next === cursor) break;
+    if (!next || (next === cursor && users.size === before)) break;
+    if (cursors.has(next)) throw new Error("列表成员分页重复，无法确认完整成员状态");
     if (page === 199) throw new Error("列表成员过多，未能完整读取，请缩小列表后重试");
+    cursors.add(next);
     cursor = next;
   }
   return [...users.values()];
+}
+
+// A DecodeException can describe response serialization after a write. Never
+// repeat that write or infer success from partial data: re-read membership.
+async function ttVerifiedListMutation(name, listId, userId, signal) {
+  let decodeError;
+  try {
+    await ttGql(name, { listId, userId }, true, { signal, retry: false });
+  } catch (err) {
+    if (!/\bDecodeException\b/.test(err.message) || signal?.aborted) throw err;
+    decodeError = err;
+  }
+  try {
+    const users = await ttFetchMembers(listId, null, signal);
+    const present = users.some(user => user.id === userId);
+    if (present !== (name === "ListAddMember")) throw new Error("成员状态与操作结果不符");
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    const error = new Error("无法确认" + (name === "ListAddMember" ? "加入目标列表" : "从源列表移除") +
+      "是否成功，已停止；请重新加载成员核对。" + (decodeError ? "X 返回接口解码错误。" : err.message));
+    error.stopMigration = true;
+    throw error;
+  }
+  return Boolean(decodeError);
 }
 
 // ---------- UI ----------
@@ -204,18 +233,36 @@ async function ttOpenListsTool() {
     cancelBtn.hidden = false;
     const failed = [];
     let done = 0;
+    let reconciled = 0;
+    let stopped = false;
+    let destination;
+    try {
+      say("正在核对目标列表成员…");
+      destination = new Set((await ttFetchMembers(dst.id, null, controller.signal)).map(m => m.id));
+    } catch (err) {
+      if (!cancelled) failed.push("读取目标列表失败，未执行迁移：" + err.message);
+      stopped = true;
+    }
     for (const m of todo) {
-      if (cancelled) break;
+      if (cancelled || stopped) break;
+      let inDestination = destination.has(m.id);
       try {
-        await ttGql("ListAddMember", { listId: dst.id, userId: m.id }, true, { signal: controller.signal });
-        if (move) await ttGql("ListRemoveMember", { listId: src.id, userId: m.id }, true, { signal: controller.signal });
+        if (!inDestination) {
+          reconciled += Number(await ttVerifiedListMutation("ListAddMember", dst.id, m.id, controller.signal));
+          destination.add(m.id);
+          inDestination = true;
+        }
+        if (move) reconciled += Number(await ttVerifiedListMutation("ListRemoveMember", src.id, m.id, controller.signal));
       } catch (err) {
         if (controller.signal.aborted) break;
-        failed.push("@" + m.handle + "：" + err.message);
+        failed.push("@" + m.handle + "：" + (inDestination && move ? "已在目标列表，源列表移除未完成。" : "未移除源列表成员。") + err.message);
+        stopped = err.stopMigration || /\bDecodeException\b/.test(err.message) ||
+          [400, 401, 403, 404, 429].includes(err.status);
       }
       done++;
       setBar((done / todo.length) * 100);
       say("进度 " + done + "/" + todo.length + "，失败 " + failed.length);
+      if (stopped) break;
       try {
         await ttSleep(TT_LIST_DELAY, controller.signal);
       } catch {
@@ -223,8 +270,10 @@ async function ttOpenListsTool() {
       }
     }
     say(
-      (cancelled ? "已停止。" : "完成。") + "处理 " + done + "/" + todo.length + "，成功 " + (done - failed.length) +
-        "，失败 " + failed.length + (failed.length ? "\n" + failed.join("\n") : "")
+      (cancelled || stopped ? "已停止。" : "完成。") + "处理 " + done + "/" + todo.length + "，成功 " + Math.max(0, done - failed.length) +
+        "，失败 " + (done ? failed.length : 0) + (done < todo.length ? "，未处理 " + (todo.length - done) : "") +
+        (failed.length ? "\n" + failed.join("\n") : "") +
+        (reconciled ? "\n" + reconciled + " 次接口解码报错已通过成员复核确认成功。" : "")
     );
     cancelBtn.hidden = true;
     // A move changes source membership. Require a fresh load before another run.

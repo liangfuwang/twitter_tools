@@ -150,3 +150,37 @@ test("GraphQL pre-follow errors preserve HTTP status and X error code", async ()
   const { api } = setup({ fetch: async () => response({ errors: [{ code: 89, message: "Invalid session" }] }, 401) });
   await assert.rejects(api.ttGql("Test", {}, false), error => error.status === 401 && error.apiCode === 89);
 });
+
+test("GraphQL uses actual true/false feature values and keeps unknown experiments off for reads and writes", async () => {
+  const calls = [];
+  const { api } = setup({
+    reply: () => ({ bearer: "test-only", ops: { Test: {
+      id: "test-query", features: ["enabled", "disabled", "unknown", "nonBoolean"], toggles: ["extra"],
+      featureValues: { enabled: true, disabled: false, nonBoolean: "true" },
+    } } }),
+    fetch: async (url, options) => { calls.push({ url, options }); return response({ data: {} }); },
+  });
+  await api.ttGql("Test", { listId: "1", userId: "2" }, false);
+  await api.ttGql("Test", { listId: "1", userId: "2" }, true);
+  const query = new URL(calls[0].url, "https://x.com").searchParams;
+  const post = JSON.parse(calls[1].options.body);
+  const expected = { enabled: true, disabled: false, unknown: false, nonBoolean: false };
+  assert.deepEqual(JSON.parse(query.get("features")), expected);
+  assert.deepEqual(post.features, expected);
+  assert.deepEqual(post.variables, { listId: "1", userId: "2" });
+  assert.deepEqual(post.fieldToggles, { extra: false });
+});
+
+test("list writes refresh page feature values rather than reusing cached account flags", async () => {
+  const values = [];
+  const { api, requests } = setup({
+    reply: n => ({ bearer: "test-only", ops: { ListAddMember: {
+      id: "test-query", features: ["experiment"], toggles: [], featureValues: { experiment: n === 1 },
+    } } }),
+    fetch: async (url, options) => { values.push(JSON.parse(options.body).features.experiment); return response({ data: {} }); },
+  });
+  await api.ttGql("ListAddMember", {}, true);
+  await api.ttGql("ListAddMember", {}, true);
+  assert.deepEqual(values, [true, false]);
+  assert.equal(requests(), 2);
+});
