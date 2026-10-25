@@ -4,7 +4,7 @@
 
 优化 Twitter/X 阅读体验的 Chrome 扩展（Manifest V3），使用原生 JavaScript，无构建步骤。
 
-当前版本：**0.4.0**。
+当前版本：**0.4.1**。
 
 ## 亮点
 

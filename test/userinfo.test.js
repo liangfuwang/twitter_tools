@@ -7,6 +7,9 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function setup({ query = async () => ({ data: {} }), sleep = async () => {},
   follow = async () => ({ user: {}, status: "done" }),
   viewer = () => "viewer", cache = {}, ownHandle = "", pathname = "/home" } = {}) {
+  const runtime = { id: "test" };
+  const timers = [];
+  const saved = [];
   const articles = [];
   const flags = new Set(["tt-quickFollow"]);
   const observed = new Set();
@@ -20,24 +23,25 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
   };
   const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiCacheUser", "ttUiFresh", "ttUiFollow", "ttUiRender", "ttUiHandleOf"], {
     document, location: { pathname },
-    chrome: { storage: { local: { get: async () => ({ ttUserCache: cache }), set: async () => {} } } },
-    MutationObserver: class { observe() {} },
+    chrome: { runtime, storage: { local: { get: async () => ({ ttUserCache: cache }), set: async value => { saved.push(value); } } } },
+    MutationObserver: class { observe() {} disconnect() {} },
     IntersectionObserver: class {
       constructor(fn) { intersect = fn; }
       observe(article) { observed.add(article); }
       unobserve(article) { observed.delete(article); }
+      disconnect() { observed.clear(); }
     },
     requestAnimationFrame: fn => setImmediate(fn),
     ttNoteHandle: box => box.handle,
     ttOwnId: viewer,
     ttFollowAndNotifyUser: follow,
     ttParseUser: () => null, ttAuthorBadges,
-    ttGql: query, ttSleep: sleep, setTimeout: () => 0, clearTimeout,
+    ttGql: query, ttSleep: sleep, setTimeout: fn => (timers.push(fn), 0), clearTimeout,
   });
   function article(handle) {
     return { isConnected: true, querySelector: selector => selector.includes("User-Name") ? { handle, querySelector: () => null } : null };
   }
-  return { api, articles, flags, observed, article, intersect: entries => intersect(entries) };
+  return { api, articles, flags, observed, article, runtime, timers, saved, intersect: entries => intersect(entries) };
 }
 
 function element(tag) {
@@ -258,4 +262,20 @@ test("badges can appear for self and profile posts without introducing quick-fol
     env.api.ttUiRender(block, "Jack", user);
     assert.deepEqual(block.children[0].children.map(b => b.textContent), ["100粉丝"]);
   }
+});
+
+test("an orphaned copy after an extension reload stops instead of throwing or saving", async () => {
+  const env = setup();
+  await tick();
+  const article = env.article("Jack");
+  env.articles.push(article);
+  env.api.ttUiScan();
+  env.api.ttUiCacheUser("jack", { id: "1" });
+  assert.ok(env.observed.has(article));
+  delete env.runtime.id;
+  for (const fn of env.timers) fn();
+  assert.equal(env.saved.length, 0);
+  assert.equal(env.observed.size, 0);
+  env.api.ttUiScan();
+  assert.equal(env.observed.size, 0);
 });

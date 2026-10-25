@@ -15,6 +15,18 @@ const ttUiOwner = () => ttOwnId() || ttUiOwnHandle();
 const ttUiFresh = (key) => ttUiCache[key]?.v === TT_UI_CACHE_VERSION &&
   ttUiCache[key]?.owner === ttUiOwner() && Date.now() - (ttUiCache[key]?.t || 0) < TT_UI_TTL;
 
+// Reloading or updating the extension orphans this copy in open tabs: it keeps running, but chrome.* calls
+// throw "Extension context invalidated". Detect that and shut down instead of erroring and fetching twice.
+const ttUiAlive = () => Boolean(chrome.runtime?.id);
+const ttUiObservers = [];
+
+function ttUiStop() {
+  ttUiReady = false;
+  ttUiQueue.clear();
+  ttUiSeen.disconnect();
+  for (const observer of ttUiObservers) observer.disconnect();
+}
+
 function ttUiCacheUser(key, user) {
   const owner = ttUiOwner();
   const previous = ttUiCache[key];
@@ -27,12 +39,13 @@ let ttUiSaveTimer;
 function ttUiSave() {
   clearTimeout(ttUiSaveTimer);
   ttUiSaveTimer = setTimeout(() => {
+    if (!ttUiAlive()) return ttUiStop();
     const keys = Object.keys(ttUiCache);
     if (keys.length > TT_UI_MAX) {
       keys.sort((a, b) => ttUiCache[a].t - ttUiCache[b].t);
       for (const k of keys.slice(0, keys.length - TT_UI_MAX)) delete ttUiCache[k];
     }
-    chrome.storage.local.set({ [TT_UI_KEY]: ttUiCache });
+    chrome.storage.local.set({ [TT_UI_KEY]: ttUiCache }).catch(() => {});
   }, 2000);
 }
 
@@ -72,6 +85,7 @@ async function ttUiRun() {
   ttUiRunning = true;
   try {
     while (ttUiQueue.size) {
+      if (!ttUiAlive()) return ttUiStop();
       const wait = ttUiPausedUntil - Date.now();
       if (wait > 0) await ttSleep(wait);
       // Scrolling or disabling the feature can empty the queue during a rate-limit wait.
@@ -323,6 +337,7 @@ document.addEventListener(
 
 let ttUiQueued = false;
 function ttUiQueueScan() {
+  if (!ttUiAlive()) return ttUiStop();
   if (ttUiQueued) return;
   ttUiQueued = true;
   requestAnimationFrame(() => {
@@ -338,5 +353,6 @@ chrome.storage.local.get(TT_UI_KEY).then((r) => {
   ttUiQueueScan();
 });
 
-new MutationObserver(ttUiQueueScan).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-new MutationObserver(ttUiQueueScan).observe(document.documentElement, { childList: true, subtree: true });
+ttUiObservers.push(new MutationObserver(ttUiQueueScan), new MutationObserver(ttUiQueueScan));
+ttUiObservers[0].observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+ttUiObservers[1].observe(document.documentElement, { childList: true, subtree: true });
