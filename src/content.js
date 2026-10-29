@@ -94,8 +94,10 @@ chrome.storage.onChanged.addListener((_changes, area) => {
 });
 
 // X re-renders the nav (and drops our links), so re-inject after DOM changes. Cheap no-op when nothing is missing.
+// An orphaned copy keeps its old settings and would re-add links the new copy removes, so it stops instead.
 let ttQueued = false;
-new MutationObserver(() => {
+const ttObserver = new MutationObserver(() => {
+  if (!ttAlive()) return ttObserver.disconnect();
   if (ttQueued) return;
   ttQueued = true;
   requestAnimationFrame(() => {
@@ -103,4 +105,5 @@ new MutationObserver(() => {
     ttInject();
     ttStripTitle();
   });
-}).observe(document.documentElement, { childList: true, subtree: true });
+});
+ttObserver.observe(document.documentElement, { childList: true, subtree: true });

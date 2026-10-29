@@ -236,12 +236,15 @@ function ttInjectExport() {
   }
 }
 
+// An orphaned copy keeps its old settings and would re-add items the new copy removes, so it stops instead.
 let ttExportQueued = false;
-new MutationObserver(() => {
+const ttExportObserver = new MutationObserver(() => {
+  if (!ttAlive()) return ttExportObserver.disconnect();
   if (ttExportQueued || !ttShareButton) return;
   ttExportQueued = true;
   requestAnimationFrame(() => {
     ttExportQueued = false;
     ttInjectExport();
   });
-}).observe(document.documentElement, { childList: true, subtree: true });
+});
+ttExportObserver.observe(document.documentElement, { childList: true, subtree: true });

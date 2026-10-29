@@ -146,6 +146,13 @@ function ttLoadSettings() {
   return chrome.storage.sync.get(TT_DEFAULTS);
 }
 
+// Reloading or updating the extension orphans the content scripts in open tabs: they keep running with stale
+// settings and notes, and chrome.* calls throw "Extension context invalidated". Each script checks this from its
+// observers and shuts down, so the orphan cannot fight the new copy over the same DOM.
+function ttAlive() {
+  return Boolean(globalThis.chrome?.runtime?.id);
+}
+
 // Missing or malformed counts must not be presented as zero followers.
 function ttMetricNumber(value) {
   if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) return null;

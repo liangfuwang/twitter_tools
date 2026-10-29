@@ -73,8 +73,19 @@ function ttRateScan() {
   for (const article of ttRateVisible) ttRateRender(article);
 }
 
+// An orphaned copy (see ttAlive) stops observing and refreshing; the new copy takes over the same pills.
+function ttRateStop() {
+  ttRateMutations.disconnect();
+  ttRateObserver.disconnect();
+  ttRateArticles.clear();
+  ttRateVisible.clear();
+  clearInterval(ttRateTimer);
+  document.removeEventListener("visibilitychange", ttRateQueueScan);
+}
+
 let ttRateQueued = false;
 function ttRateQueueScan() {
+  if (!ttAlive()) return ttRateStop();
   if (ttRateQueued) return;
   ttRateQueued = true;
   requestAnimationFrame(() => {
@@ -82,12 +93,14 @@ function ttRateQueueScan() {
     ttRateScan();
   });
 }
-new MutationObserver(ttRateQueueScan).observe(document.documentElement, {
+const ttRateMutations = new MutationObserver(ttRateQueueScan);
+ttRateMutations.observe(document.documentElement, {
   childList: true, subtree: true, characterData: true,
   attributes: true, attributeFilter: ["class", "aria-label", "href", "datetime"],
 });
 document.addEventListener("visibilitychange", ttRateQueueScan);
-setInterval(() => {
+const ttRateTimer = setInterval(() => {
+  if (!ttAlive()) return ttRateStop();
   if (!document.hidden) for (const article of ttRateVisible) ttRateRender(article);
 }, 60000);
 ttRateQueueScan();

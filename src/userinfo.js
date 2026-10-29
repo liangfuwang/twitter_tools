@@ -15,9 +15,8 @@ const ttUiOwner = () => ttOwnId() || ttUiOwnHandle();
 const ttUiFresh = (key) => ttUiCache[key]?.v === TT_UI_CACHE_VERSION &&
   ttUiCache[key]?.owner === ttUiOwner() && Date.now() - (ttUiCache[key]?.t || 0) < TT_UI_TTL;
 
-// Reloading or updating the extension orphans this copy in open tabs: it keeps running, but chrome.* calls
-// throw "Extension context invalidated". Detect that and shut down instead of erroring and fetching twice.
-const ttUiAlive = () => Boolean(chrome.runtime?.id);
+// An orphaned copy (see ttAlive) shuts down instead of erroring and fetching twice.
+const ttUiAlive = ttAlive;
 const ttUiObservers = [];
 
 function ttUiStop() {
@@ -325,7 +324,8 @@ function ttUiScan() {
 document.addEventListener(
   "click",
   (e) => {
-    if (!e.target.closest?.(".tt-ui")) return;
+    // Both an orphaned and the new copy listen here; only the live one may send a follow request.
+    if (!e.target.closest?.(".tt-ui") || !ttUiAlive()) return;
     e.preventDefault();
     e.stopPropagation();
     const follow = e.target.closest(".tt-ui-follow");

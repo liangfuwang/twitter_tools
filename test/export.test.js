@@ -77,3 +77,26 @@ for (const kind of ["VIDEO", "CANVAS", "IFRAME"]) {
     assert.match(media.replacement.children[0].textContent, /请查看原帖/);
   });
 }
+
+test("an orphaned copy after an extension reload stops adding menu items", () => {
+  let click, fire, disconnected = false, menuLookups = 0;
+  const runtime = { id: "test" };
+  load("src/export.js", [], {
+    document: {
+      documentElement: {},
+      addEventListener: (_, fn) => { click = fn; },
+      querySelector: () => { menuLookups++; return null; },
+    },
+    ttAlive: load("src/settings.js", ["ttAlive"], { chrome: { runtime } }).ttAlive,
+    requestAnimationFrame: fn => fn(),
+    MutationObserver: class { constructor(fn) { fire = fn; } observe() {} disconnect() { disconnected = true; } },
+  });
+  const share = { isConnected: true, getAttribute: () => "true", closest: s => s.startsWith("[data-testid=") ? null : {} };
+  click({ target: { closest: () => share } });
+  fire();
+  assert.equal(menuLookups, 1);
+  delete runtime.id;
+  fire();
+  assert.equal(disconnected, true);
+  assert.equal(menuLookups, 1);
+});

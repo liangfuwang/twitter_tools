@@ -27,16 +27,20 @@ function setup(withText) {
     return links.get(/data-tt-inject="([^"]+)"/.exec(selector)?.[1]) || null;
   } };
   const defaults = { navLists: true, hideBadges: false };
+  const runtime = { id: "test" };
+  const observer = { disconnected: false };
   const { ttApply, ttInject } = load("src/content.js", ["ttApply", "ttInject"], {
     TT_DEFAULTS: defaults,
     TT_SECTIONS: [{ options: [{ key: "navLists", label: "列表", inject: "{user}/lists" }] }],
     ttLoadSettings: () => new Promise(() => {}),
     document: { documentElement: { classList: { toggle() {} } }, querySelector: () => nav },
-    chrome: { storage: { onChanged: { addListener() {} } } },
-    MutationObserver: class { observe() {} },
+    chrome: { runtime, storage: { onChanged: { addListener() {} } } },
+    ttAlive: load("src/settings.js", ["ttAlive"], { chrome: { runtime } }).ttAlive,
+    requestAnimationFrame: fn => fn(),
+    MutationObserver: class { constructor(fn) { observer.fire = fn; } observe() {} disconnect() { observer.disconnected = true; } },
     getComputedStyle: el => { assert.ok(el); return { color: "rgb(15, 20, 25)" }; },
   });
-  return { links, show: () => ttApply({ ...defaults, navLists: false }), hide: () => ttApply(defaults), inject: ttInject };
+  return { links, runtime, observer, show: () => ttApply({ ...defaults, navLists: false }), hide: () => ttApply(defaults), inject: ttInject };
 }
 
 for (const withText of [false, true]) {
@@ -61,3 +65,13 @@ for (const withText of [false, true]) {
     assert.equal(env.links.size, 0);
   });
 }
+
+test("an orphaned copy after an extension reload stops re-injecting with its stale settings", () => {
+  const env = setup(false);
+  env.show();
+  env.links.clear(); // The new copy removed the link after the setting changed.
+  delete env.runtime.id;
+  env.observer.fire();
+  assert.equal(env.observer.disconnected, true);
+  assert.equal(env.links.size, 0);
+});

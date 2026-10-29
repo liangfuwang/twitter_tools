@@ -82,15 +82,20 @@ function fixture() {
 function setup(articles) {
   const enabled = new Set(["tt-postViewRate"]);
   const observed = new Set();
-  let intersect, refresh;
+  const runtime = { id: "test" };
+  const stopped = { mutations: false, interval: false, visibility: false };
+  let intersect, refresh, mutate;
   const document = { documentElement: { classList: { contains: k => enabled.has(k) } }, hidden: false,
-    querySelectorAll: () => articles, createElement: tag => new Element(tag), addEventListener() {} };
+    querySelectorAll: () => articles, createElement: tag => new Element(tag), addEventListener() {},
+    removeEventListener: () => { stopped.visibility = true; } };
   const api = load("src/insights.js", ["ttRateMetrics", "ttRateRender", "ttRateScan", "ttRateArticles", "ttRateVisible"], {
-    ...helpers, document, requestAnimationFrame: fn => fn(), setInterval: fn => { refresh = fn; },
-    MutationObserver: class { observe() {} },
-    IntersectionObserver: class { constructor(fn) { intersect = fn; } observe(a) { observed.add(a); } unobserve(a) { observed.delete(a); } },
+    ...helpers, document, requestAnimationFrame: fn => fn(), setInterval: fn => { refresh = fn; return 1; },
+    clearInterval: () => { stopped.interval = true; },
+    ttAlive: load("src/settings.js", ["ttAlive"], { chrome: { runtime } }).ttAlive,
+    MutationObserver: class { constructor(fn) { mutate = fn; } observe() {} disconnect() { stopped.mutations = true; } },
+    IntersectionObserver: class { constructor(fn) { intersect = fn; } observe(a) { observed.add(a); } unobserve(a) { observed.delete(a); } disconnect() { observed.clear(); } },
   });
-  return { api, enabled, observed, document, refresh: () => refresh(), intersect: a => intersect([{ target: a, isIntersecting: true }]) };
+  return { api, enabled, observed, document, runtime, stopped, mutate: () => mutate(), refresh: () => refresh(), intersect: a => intersect([{ target: a, isIntersecting: true }]) };
 }
 
 test("rate pills use the matching post's exact views, update in place and never duplicate", () => {
@@ -138,4 +143,20 @@ test("removed or hidden posts release observers and do not refresh in the backgr
   assert.equal(env.api.ttRateArticles.size, 0);
   assert.equal(env.api.ttRateVisible.size, 0);
   assert.equal(env.observed.size, 0);
+});
+
+test("an orphaned copy after an extension reload stops observing and refreshing", () => {
+  const { article } = fixture();
+  const env = setup([article]);
+  env.intersect(article);
+  const badge = article.querySelector(".tt-post-rate");
+  badge.textContent = "left for the new copy";
+  delete env.runtime.id;
+  env.refresh();
+  assert.equal(badge.textContent, "left for the new copy");
+  assert.deepEqual(env.stopped, { mutations: true, interval: true, visibility: true });
+  assert.equal(env.observed.size, 0);
+  assert.equal(env.api.ttRateVisible.size, 0);
+  env.mutate();
+  assert.equal(env.api.ttRateArticles.size, 0);
 });

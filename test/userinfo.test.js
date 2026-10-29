@@ -13,17 +13,18 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
   const articles = [];
   const flags = new Set(["tt-quickFollow"]);
   const observed = new Set();
-  let intersect;
+  let intersect, click;
   const document = {
     documentElement: { classList: { contains: key => flags.has(key) } },
     querySelector: () => ownHandle ? { getAttribute: () => "/" + ownHandle } : null,
     querySelectorAll: selector => selector.startsWith("article") ? articles : [],
     createElement: element,
-    addEventListener() {},
+    addEventListener: (type, fn) => { if (type === "click") click = fn; },
   };
   const api = load("src/userinfo.js", ["ttUiScan", "ttUiQueue", "ttUiArticles", "ttUiHeader", "ttUiCacheUser", "ttUiFresh", "ttUiFollow", "ttUiRender", "ttUiHandleOf"], {
     document, location: { pathname },
     chrome: { runtime, storage: { local: { get: async () => ({ ttUserCache: cache }), set: async value => { saved.push(value); } } } },
+    ttAlive: load("src/settings.js", ["ttAlive"], { chrome: { runtime } }).ttAlive,
     MutationObserver: class { observe() {} disconnect() {} },
     IntersectionObserver: class {
       constructor(fn) { intersect = fn; }
@@ -41,7 +42,7 @@ function setup({ query = async () => ({ data: {} }), sleep = async () => {},
   function article(handle) {
     return { isConnected: true, querySelector: selector => selector.includes("User-Name") ? { handle, querySelector: () => null } : null };
   }
-  return { api, articles, flags, observed, article, runtime, timers, saved, intersect: entries => intersect(entries) };
+  return { api, articles, flags, observed, article, runtime, timers, saved, intersect: entries => intersect(entries), click: e => click(e) };
 }
 
 function element(tag) {
@@ -278,4 +279,28 @@ test("an orphaned copy after an extension reload stops instead of throwing or sa
   assert.equal(env.observed.size, 0);
   env.api.ttUiScan();
   assert.equal(env.observed.size, 0);
+});
+
+test("an orphaned copy ignores clicks so only the new copy sends a follow request", async () => {
+  let follows = 0;
+  const env = setup({ follow: async () => { follows++; return { user: { id: "1" }, status: "done" }; } });
+  await tick();
+  env.api.ttUiCacheUser("jack", { id: "1" });
+  const button = { disabled: false, dataset: { ttHandle: "Jack" } };
+  let prevented = false;
+  const event = {
+    target: { closest: selector => selector === ".tt-ui" || selector === ".tt-ui-follow" ? button : null },
+    preventDefault: () => { prevented = true; },
+    stopPropagation() {},
+  };
+  delete env.runtime.id;
+  env.click(event);
+  await tick();
+  assert.equal(follows, 0);
+  assert.equal(prevented, false);
+  env.runtime.id = "test";
+  env.click(event);
+  await tick();
+  assert.equal(follows, 1);
+  assert.equal(prevented, true);
 });

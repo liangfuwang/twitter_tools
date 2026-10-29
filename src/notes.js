@@ -163,8 +163,9 @@ function ttNoteEdit(handle) {
 document.addEventListener(
   "click",
   (e) => {
+    // Both an orphaned and the new copy listen here; only the live one may open the editor.
     const el = e.target.closest?.(".tt-note-pill, .tt-note-btn");
-    if (!el) return;
+    if (!el || !ttAlive()) return;
     e.preventDefault();
     e.stopPropagation();
     ttNoteEdit(el.dataset.ttHandle);
@@ -172,8 +173,14 @@ document.addEventListener(
   true
 );
 
+// An orphaned copy holds stale notes and would rewrite pills the new copy just updated, every frame.
+const ttNoteObservers = [];
 let ttNoteQueued = false;
 function ttNoteQueue() {
+  if (!ttAlive()) {
+    for (const observer of ttNoteObservers) observer.disconnect();
+    return;
+  }
   if (ttNoteQueued) return;
   ttNoteQueued = true;
   requestAnimationFrame(() => {
@@ -195,5 +202,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // Setting toggles show up as class changes on <html>; page content changes as DOM mutations.
-new MutationObserver(ttNoteQueue).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-new MutationObserver(ttNoteQueue).observe(document.documentElement, { childList: true, subtree: true });
+ttNoteObservers.push(new MutationObserver(ttNoteQueue), new MutationObserver(ttNoteQueue));
+ttNoteObservers[0].observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+ttNoteObservers[1].observe(document.documentElement, { childList: true, subtree: true });
